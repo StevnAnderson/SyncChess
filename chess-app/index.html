@@ -61,11 +61,27 @@
     }
 
     .game-side-label {
-      min-width: 5.25rem;
+      box-sizing: border-box;
+      min-width: 5.5rem;
+      padding: 0.15rem 0.3rem;
+      background: none;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-family: inherit;
       font-size: 0.85rem;
       color: var(--text-muted);
       white-space: nowrap;
-      pointer-events: none;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .game-side-label:hover {
+      color: var(--text-main);
+    }
+
+    .game-side-label:focus-visible {
+      outline: none;
+      border-color: var(--accent);
     }
 
     .game-side-label.prev {
@@ -504,6 +520,8 @@
 
       .game-side-label {
         min-width: 0;
+        padding: 0.15rem 0.1rem;
+        border-width: 1px;
         font-size: 0.7rem;
       }
     }
@@ -513,11 +531,11 @@
 
   <header>
     <div class="game-switcher">
-      <span class="game-side-label prev" id="game-prev-name" aria-hidden="true"></span>
+      <button class="game-side-label prev" id="game-prev-name" type="button" aria-label="Previous game"></button>
       <button class="game-arrow" id="game-prev" type="button" aria-label="Previous game">&#8249;</button>
       <button class="game-title" id="game-title" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="game-menu">Sync Chess</button>
       <button class="game-arrow" id="game-next" type="button" aria-label="Next game">&#8250;</button>
-      <span class="game-side-label next" id="game-next-name" aria-hidden="true"></span>
+      <button class="game-side-label next" id="game-next-name" type="button" aria-label="Next game"></button>
       <ul class="game-menu" id="game-menu" role="listbox" aria-label="Games" hidden></ul>
     </div>
   </header>
@@ -1689,6 +1707,8 @@
       nextNameEl.textContent = next.name;
       prevBtnEl.setAttribute('aria-label', `Previous game: ${prev.name}`);
       nextBtnEl.setAttribute('aria-label', `Next game: ${next.name}`);
+      prevNameEl.setAttribute('aria-label', `Switch to previous game: ${prev.name}`);
+      nextNameEl.setAttribute('aria-label', `Switch to next game: ${next.name}`);
       rulesEl.sync.hidden = !isSync();
       rulesEl.chess.hidden = gameKind !== 'chess';
       rulesEl.dark.hidden = !isDark();
@@ -1759,6 +1779,8 @@
     });
     document.getElementById('game-prev').addEventListener('click', () => cycleGame(-1));
     document.getElementById('game-next').addEventListener('click', () => cycleGame(1));
+    prevNameEl.addEventListener('click', () => cycleGame(-1));
+    nextNameEl.addEventListener('click', () => cycleGame(1));
     document.addEventListener('click', e => {
       if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu();
     });
