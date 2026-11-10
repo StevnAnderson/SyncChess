@@ -246,6 +246,7 @@
       color: var(--text-main);
     }
     .board-panel {
+      position: relative;
       background-color: var(--card-bg);
       border-radius: 12px;
       padding: 1.5rem;
@@ -305,6 +306,56 @@
       background-color: transparent;
       border: 4px solid rgba(30, 30, 40, 0.35);
       box-sizing: border-box;
+    }
+
+    .square.fog {
+      cursor: default;
+    }
+
+    .square.fog::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: radial-gradient(circle at 50% 45%, rgba(58, 58, 82, 0.6), rgba(16, 16, 24, 0.96) 78%);
+    }
+
+    .square.fog .coord {
+      z-index: 3;
+      color: rgba(244, 244, 246, 0.45);
+    }
+
+    .handoff {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      padding: 1.5rem;
+      text-align: center;
+      background-color: var(--card-bg);
+      border-radius: 12px;
+    }
+
+    .handoff[hidden] {
+      display: none;
+    }
+
+    .handoff h2 {
+      margin: 0;
+      border: none;
+      padding: 0;
+      font-size: 1.5rem;
+    }
+
+    .handoff p {
+      margin: 0;
+      max-width: 26rem;
+      color: var(--text-muted);
+      line-height: 1.5;
     }
 
     .piece {
@@ -423,6 +474,11 @@
       <div class="promotion" id="promotion" hidden>
         <span>Promote to:</span>
       </div>
+      <div class="handoff" id="handoff" hidden>
+        <h2 id="handoff-title">Pass to the Black player</h2>
+        <p>Hand the device over before the next turn so only the right player sees the board.</p>
+        <button class="btn" id="handoff-btn" type="button">I am the Black Player</button>
+      </div>
     </div>
 
     <div class="rules-panel" id="rules-sync">
@@ -446,6 +502,18 @@
         <li>Checkmate wins the game; stalemate is a draw.</li>
       </ul>
     </div>
+
+    <div class="rules-panel" id="rules-dark" hidden>
+      <h2>How Dark Chess Works</h2>
+      <ul>
+        <li>Dark Chess follows normal chess rules with one big difference: you only see the squares your own pieces can move to.</li>
+        <li>Every square you cannot move to is covered by fog of war. A piece might be there, or it might be empty.</li>
+        <li>There is no check and no checkmate. You are never warned that your king is attacked &mdash; if your king is captured, you lose.</li>
+        <li>Castling only requires the squares between the king and rook to be empty. You may castle while in check, through check, or into check.</li>
+        <li>En passant works normally, so the square behind an enemy pawn becomes visible while the capture is legal even if the pawn itself stays hidden.</li>
+        <li>In Pass &amp; Play the board is hidden between turns, so each player only ever sees their own view.</li>
+      </ul>
+    </div>
   </div>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script>
@@ -462,7 +530,8 @@
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const GAMES = [
       { id: 'sync', name: 'Sync Chess' },
-      { id: 'chess', name: 'Chess' }
+      { id: 'chess', name: 'Chess' },
+      { id: 'dark', name: 'Dark Chess' }
     ];
 
     const boardEl = document.getElementById('board');
@@ -470,8 +539,12 @@
     const menuEl = document.getElementById('game-menu');
     const rulesEl = {
       sync: document.getElementById('rules-sync'),
-      chess: document.getElementById('rules-chess')
+      chess: document.getElementById('rules-chess'),
+      dark: document.getElementById('rules-dark')
     };
+    const handoffEl = document.getElementById('handoff');
+    const handoffTitleEl = document.getElementById('handoff-title');
+    const handoffBtnEl = document.getElementById('handoff-btn');
     const panelEl = document.getElementById('board-panel');
     const turnEl = document.getElementById('turn-indicator');
     const promoEl = document.getElementById('promotion');
@@ -494,6 +567,9 @@
     let conn = null;
     let localMode = false;
     let lastHeard = 0;
+    let handoff = false;
+    let handoffTimer = null;
+    let darkView = 'w';
 
     const makePiece = (t, c) => ({ t, c, id: nextId++, delayed: false });
     const inBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
@@ -502,6 +578,7 @@
     const squareName = ([r, c]) => FILES[c] + (8 - r);
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
     const isSync = () => gameKind === 'sync';
+    const isDark = () => gameKind === 'dark';
     const currentGame = () => GAMES.find(g => g.id === gameKind);
     const activeColor = () => (localMode && !isSync() ? game.turn : myColor);
     const gameInProgress = () => !!game && phase !== 'over';
@@ -529,14 +606,23 @@
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
+      clearTimeout(handoffTimer);
+      handoffTimer = null;
+      handoff = false;
+      handoffEl.hidden = true;
+      darkView = 'w';
       panelEl.hidden = false;
       logEl.textContent = isSync()
         ? (localMode
           ? 'White picks a move first, then passes the device to Black. Both moves happen at the same time.'
           : `You are ${SIDE[myColor]}. Pick a move; nothing happens until your opponent picks theirs.`)
-        : (localMode
-          ? 'White moves first. Take turns passing the device after each move.'
-          : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`);
+        : isDark()
+          ? (localMode
+            ? 'White moves first. Pass the device between turns so each player only sees their own squares.'
+            : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`)
+          : (localMode
+            ? 'White moves first. Take turns passing the device after each move.'
+            : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`);
       updateStatus();
       render();
     }
@@ -594,7 +680,7 @@
       return !!king && isAttacked(board, king[0], king[1], opponent(color));
     }
 
-    function pseudoMoves(g, r, c) {
+    function pseudoMoves(g, r, c, strictCheck = true) {
       const { board } = g;
       const piece = board[r][c];
       const moves = [];
@@ -629,13 +715,14 @@
         if (piece.t === 'k') {
           const home = piece.c === 'w' ? 7 : 0;
           const enemy = opponent(piece.c);
-          if (r === home && c === 4 && !isAttacked(board, home, 4, enemy)) {
+          const safe = sq => !strictCheck || !isAttacked(board, home, sq, enemy);
+          if (r === home && c === 4 && safe(4)) {
             if (g.castling[piece.c + 'K'] && !board[home][5] && !board[home][6] &&
-                !isAttacked(board, home, 5, enemy) && !isAttacked(board, home, 6, enemy)) {
+                safe(5) && safe(6)) {
               add(home, 6, { castle: 'K' });
             }
             if (g.castling[piece.c + 'Q'] && !board[home][3] && !board[home][2] && !board[home][1] &&
-                !isAttacked(board, home, 3, enemy) && !isAttacked(board, home, 2, enemy)) {
+                safe(3) && safe(2)) {
               add(home, 2, { castle: 'Q' });
             }
           }
@@ -676,7 +763,23 @@
 
     function legalMoves(g, r, c) {
       const color = g.board[r][c].c;
-      return pseudoMoves(g, r, c).filter(m => !inCheck(applySingleMove(g.board, m), color));
+      const moves = pseudoMoves(g, r, c, !isDark());
+      if (isDark()) return moves;
+      return moves.filter(m => !inCheck(applySingleMove(g.board, m), color));
+    }
+
+    // Dark Chess: everything your own pieces could move to is visible, the rest is fog.
+    function visibleSquares(color) {
+      const seen = new Set();
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = game.board[r][c];
+          if (!p || p.c !== color) continue;
+          seen.add(r * 8 + c);
+          for (const m of pseudoMoves(game, r, c, false)) seen.add(m.tr * 8 + m.tc);
+        }
+      }
+      return seen;
     }
 
     function hasAnyLegalMove(g, color) {
@@ -903,7 +1006,7 @@
       if (!game) return;
       if (!isSync()) {
         if (phase === 'select') {
-          const check = inCheck(game.board, game.turn) ? ' (Check)' : '';
+          const check = !isDark() && inCheck(game.board, game.turn) ? ' (Check)' : '';
           if (localMode) setStatus(`${SIDE[game.turn]} to Move${check}`);
           else if (game.turn === myColor) setStatus(`Your Move${check}`);
           else setStatus('Waiting for Opponent...');
@@ -929,7 +1032,8 @@
     }
 
     function onSquareClick(r, c) {
-      if (phase !== 'select' || choosingPromotion) return;
+      if (phase !== 'select' || choosingPromotion || handoff) return;
+      if (isDark() && localMode && darkView !== game.turn) return;
       if (isSync()) {
         if (pending[myColor]) return;
       } else if (!localMode && game.turn !== myColor) {
@@ -1007,7 +1111,7 @@
 
     function receiveMove(move) {
       if (!isSync()) {
-        applyStandardMove(move);
+        applyStandardMove(move, true);
         return;
       }
       pending[opponent(myColor)] = move;
@@ -1025,16 +1129,17 @@
     }
 
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
-    function applyStandardMove(move) {
+    function applyStandardMove(move, incoming = false) {
       const before = game.board;
       const moving = before[move.fr][move.fc];
       const fromType = moving.t;
-      const lines = [moveText(before, move)];
+      const quiet = isDark() && incoming;
+      const lines = [quiet ? `${SIDE[moving.c]} moved.` : moveText(before, move)];
 
       const target = before[move.tr][move.tc];
       if (target) {
         game.captured[opponent(target.c)].push(target);
-        lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
+        if (!quiet) lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
       }
       if (move.enPassant) {
         const [vr, vc] = move.victim;
@@ -1042,17 +1147,17 @@
         if (victim) {
           before[vr][vc] = null;
           game.captured[opponent(victim.c)].push(victim);
-          lines.push(`${SIDE[moving.c]}'s Pawn captured ${SIDE[victim.c]}'s Pawn en passant.`);
+          if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn captured ${SIDE[victim.c]}'s Pawn en passant.`);
         }
       }
-      if (move.castle) {
+      if (move.castle && !quiet) {
         lines.push(`${SIDE[moving.c]} castles ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
       }
 
       game.board = applySingleMove(before, move);
       if (fromType === 'p' && (move.tr === 0 || move.tr === 7)) {
         moving.t = move.promo || 'q';
-        lines.push(`${SIDE[moving.c]}'s Pawn promoted to a ${NAMES[moving.t]}.`);
+        if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn promoted to a ${NAMES[moving.t]}.`);
       }
 
       const board = game.board;
@@ -1072,15 +1177,45 @@
 
       game.lastMoves = [move];
       game.turn = opponent(moving.c);
+      darkView = moving.c;
 
       const outcome = positionResult(board);
       if (outcome) game.result = outcome;
       phase = game.result ? 'over' : 'select';
       if (game.result) lines.push(game.result);
-      else if (inCheck(board, game.turn)) lines.push(`${SIDE[game.turn]} is in check.`);
-      else if (localMode) lines.push(`${SIDE[game.turn]} to move.`);
+      else if (!quiet && !isDark() && inCheck(board, game.turn)) lines.push(`${SIDE[game.turn]} is in check.`);
+      else if (!quiet && !isDark() && localMode) lines.push(`${SIDE[game.turn]} to move.`);
 
       setLog(lines);
+      updateStatus();
+      render();
+      if (isDark() && localMode && phase === 'select') scheduleHandoff();
+    }
+
+    // Dark Chess pass & play: hide the board before handing the device over.
+    function scheduleHandoff() {
+      clearTimeout(handoffTimer);
+      handoffTimer = setTimeout(beginHandoff, 1200);
+    }
+
+    function beginHandoff() {
+      handoffTimer = null;
+      if (!game || phase === 'over') return;
+      handoff = true;
+      selected = null;
+      handoffTitleEl.textContent = `Pass to the ${SIDE[game.turn]} player`;
+      handoffBtnEl.textContent = `I am the ${SIDE[game.turn]} Player`;
+      handoffEl.hidden = false;
+      logEl.textContent = '';
+      render();
+    }
+
+    function endHandoff() {
+      handoff = false;
+      selected = null;
+      darkView = game.turn;
+      handoffEl.hidden = true;
+      logEl.textContent = '';
       updateStatus();
       render();
     }
@@ -1117,6 +1252,7 @@
       if (!kings.w || !kings.b) {
         return !kings.w && !kings.b ? 'Both Kings Fell - Draw' : `King Captured - ${!kings.w ? 'Black' : 'White'} Wins`;
       }
+      if (isDark()) return null;
       if (board.flat().every(p => !p || p.t === 'k')) return 'Only Kings Left - Stalemate';
       const g = { ...game, board };
       const stuck = { w: !hasAnyLegalMove(g, 'w'), b: !hasAnyLegalMove(g, 'b') };
@@ -1165,16 +1301,20 @@
 
     function render() {
       boardEl.innerHTML = '';
-      const checked = ['w', 'b'].filter(c => inCheck(game.board, c)).map(c => findKing(game.board, c));
+      const dark = isDark();
+      const visible = dark ? visibleSquares(localMode ? darkView : myColor) : null;
+      const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(game.board, c)).map(c => findKing(game.board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
       for (let vr = 0; vr < 8; vr++) {
         for (let vc = 0; vc < 8; vc++) {
           const r = flip ? 7 - vr : vr;
           const c = flip ? 7 - vc : vc;
+          const fogged = !!visible && !visible.has(r * 8 + c);
           const sq = document.createElement('div');
           sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
-          if (game.lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
+          if (fogged) sq.classList.add('fog');
+          if (!dark && game.lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           if (checked.some(k => k[0] === r && k[1] === c)) sq.classList.add('in-check');
           const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
@@ -1183,7 +1323,7 @@
             if (game.board[r][c] || target.enPassant) sq.classList.add('capture');
           }
           const piece = game.board[r][c];
-          if (piece) {
+          if (piece && !fogged) {
             const span = document.createElement('span');
             span.className = 'piece ' + piece.c;
             span.textContent = GLYPHS[piece.c][piece.t];
@@ -1214,7 +1354,9 @@
       }
       const shown = { b: flip ? 'w' : 'b', w: flip ? 'b' : 'w' };
       for (const color of ['w', 'b']) {
-        capturedEl[color].textContent = game.captured[shown[color]].map(p => GLYPHS[p.c][p.t]).join('');
+        capturedEl[color].textContent = dark
+          ? ''
+          : game.captured[shown[color]].map(p => GLYPHS[p.c][p.t]).join('');
       }
     }
 
@@ -1225,6 +1367,10 @@
     function leaveGame() {
       animationToken++;
       localMode = false;
+      clearTimeout(handoffTimer);
+      handoffTimer = null;
+      handoff = false;
+      handoffEl.hidden = true;
       if (conn) conn.close();
       if (peer) peer.destroy();
       conn = null;
@@ -1353,7 +1499,8 @@
       document.title = currentGame().name;
       titleEl.textContent = currentGame().name;
       rulesEl.sync.hidden = !isSync();
-      rulesEl.chess.hidden = isSync();
+      rulesEl.chess.hidden = gameKind !== 'chess';
+      rulesEl.dark.hidden = !isDark();
       if (!menuEl.hidden) buildMenu();
     }
 
@@ -1388,6 +1535,10 @@
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
+      clearTimeout(handoffTimer);
+      handoffTimer = null;
+      handoff = false;
+      handoffEl.hidden = true;
       logEl.textContent = '';
       setStatus('Host or join a game');
     }
@@ -1432,6 +1583,7 @@
     document.getElementById('join-code').addEventListener('keydown', e => {
       if (e.key === 'Enter') joinGame();
     });
+    handoffBtnEl.addEventListener('click', endHandoff);
   </script>
 
 </body>
