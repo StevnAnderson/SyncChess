@@ -60,6 +60,22 @@
       border-color: var(--accent);
     }
 
+    .game-side-label {
+      min-width: 5.25rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .game-side-label.prev {
+      text-align: right;
+    }
+
+    .game-side-label.next {
+      text-align: left;
+    }
+
     .game-title {
       background: none;
       border: none;
@@ -471,15 +487,37 @@
       color: var(--text-muted);
       font-size: 0.9rem;
     }
+
+    @media (max-width: 520px) {
+      .game-switcher {
+        gap: 0.15rem;
+      }
+
+      .game-title {
+        font-size: 1.8rem;
+      }
+
+      .game-arrow {
+        font-size: 1.4rem;
+        padding: 0.1rem 0.2rem 0.2rem;
+      }
+
+      .game-side-label {
+        min-width: 0;
+        font-size: 0.7rem;
+      }
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div class="game-switcher">
+      <span class="game-side-label prev" id="game-prev-name" aria-hidden="true"></span>
       <button class="game-arrow" id="game-prev" type="button" aria-label="Previous game">&#8249;</button>
       <button class="game-title" id="game-title" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="game-menu">Sync Chess</button>
       <button class="game-arrow" id="game-next" type="button" aria-label="Next game">&#8250;</button>
+      <span class="game-side-label next" id="game-next-name" aria-hidden="true"></span>
       <ul class="game-menu" id="game-menu" role="listbox" aria-label="Games" hidden></ul>
     </div>
   </header>
@@ -569,13 +607,17 @@
     const PEER_PREFIX = 'syncchess-';
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const GAMES = [
-      { id: 'sync', name: 'Sync Chess' },
       { id: 'chess', name: 'Chess' },
-      { id: 'dark', name: 'Dark Chess' }
+      { id: 'dark', name: 'Dark Chess' },
+      { id: 'sync', name: 'Sync Chess' }
     ];
 
     const boardEl = document.getElementById('board');
     const titleEl = document.getElementById('game-title');
+    const prevNameEl = document.getElementById('game-prev-name');
+    const nextNameEl = document.getElementById('game-next-name');
+    const prevBtnEl = document.getElementById('game-prev');
+    const nextBtnEl = document.getElementById('game-next');
     const menuEl = document.getElementById('game-menu');
     const rulesEl = {
       sync: document.getElementById('rules-sync'),
@@ -1640,6 +1682,13 @@
       gameKind = id;
       document.title = currentGame().name;
       titleEl.textContent = currentGame().name;
+      const index = GAMES.findIndex(g => g.id === gameKind);
+      const prev = GAMES[(index - 1 + GAMES.length) % GAMES.length];
+      const next = GAMES[(index + 1) % GAMES.length];
+      prevNameEl.textContent = prev.name;
+      nextNameEl.textContent = next.name;
+      prevBtnEl.setAttribute('aria-label', `Previous game: ${prev.name}`);
+      nextBtnEl.setAttribute('aria-label', `Next game: ${next.name}`);
       rulesEl.sync.hidden = !isSync();
       rulesEl.chess.hidden = gameKind !== 'chess';
       rulesEl.dark.hidden = !isDark();
