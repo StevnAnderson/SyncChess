@@ -323,7 +323,7 @@
       <ul>
         <li>Select a standard Chess legal move. Nothing will happen until your opponent also selects their move.</li>
         <li>If both players attempt to move their pieces to the same empty square, both pieces are removed. (This can kill the king, ending the game.)</li>
-        <li>If two pieces try to capture each other, they switch places.</li>
+        <li>If two pieces try to capture each other, both pieces are captured and removed from the board. (This can kill a king, ending the game.)</li>
         <li>Paths may be intercepted. If your piece ends its movement in the path of the opponent's moving piece, it will be taken, but it stops the opponent's piece in that square. (Pawns, if they move 2 squares on their first move, Bishops, Rooks, and Queens are the pieces that can be intercepted. They move along their path one square at a time as the opponent moves likewise. If you try to intercept from a far distance you may not make it there in time!)</li>
         <li>Once a piece successfully captures another piece, it is "Delayed" for the next turn.</li>
         <li>If a delayed piece is selected to move, it doesn't move until after the opponent's piece has finished moving, unless it is also delayed, then they both move simultaneously as normal.</li>
@@ -614,23 +614,6 @@
       const pieceLabel = p => `${SIDE[p.c]}'s ${NAMES[p.t]}`;
       const moverAt = sq => movers.find(m => m.alive && sameSquare(m.pos, sq));
 
-      const [sw, sb] = selections;
-      if (startTogether && sw.tr === sb.fr && sw.tc === sb.fc && sb.tr === sw.fr && sb.tc === sw.fc) {
-        const mw = mainOf('w'), mb = mainOf('b');
-        board[sw.tr][sw.tc] = mw.piece;
-        board[sb.tr][sb.tc] = mb.piece;
-        events.push(`${label(mw)} and ${label(mb)} tried to capture each other: they switch places.`);
-        for (const m of [mw, mb]) {
-          const r = m.sel.tr;
-          if (m.piece.t === 'p' && (r === 0 || r === 7)) {
-            m.piece.t = m.sel.promo || 'q';
-            events.push(`${SIDE[m.color]}'s Pawn promoted to a ${NAMES[m.piece.t]}.`);
-          }
-        }
-        frames.push(cloneBoard(board));
-        return { board, frames, events, capturers, captured, enPassant: [] };
-      }
-
       const removeMover = m => {
         m.alive = false;
         m.done = true;
@@ -647,6 +630,20 @@
         m.idx++;
         if (m.idx >= m.path.length) m.done = true;
       };
+
+      // Two pieces each target the other's square: both are captured instead of trading places.
+      const mutual = () => selections.every((a, i) => {
+        const b = selections[1 - i];
+        return a.tr === b.fr && a.tc === b.fc;
+      });
+      if (startTogether && mutual()) {
+        const mw = mainOf('w'), mb = mainOf('b');
+        events.push(`${label(mw)} and ${label(mb)} tried to capture each other: both are captured.`);
+        removeMover(mw);
+        removeMover(mb);
+        frames.push(cloneBoard(board));
+        return { board, frames, events, capturers, captured, enPassant: [] };
+      }
 
       for (let tick = 0; tick < 16; tick++) {
         const active = movers.filter(m => m.alive && !m.done && !isWaiting(m));
