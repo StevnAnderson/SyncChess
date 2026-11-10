@@ -31,10 +31,108 @@
       margin-bottom: 2rem;
     }
 
-    h1 {
-      margin: 0 0 0.5rem 0;
+    .game-switcher {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+    }
+
+    .game-arrow {
+      background: none;
+      border: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 2rem;
+      line-height: 1;
+      padding: 0.1rem 0.4rem 0.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .game-arrow:hover {
+      color: var(--text-main);
+    }
+
+    .game-arrow:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .game-title {
+      background: none;
+      border: none;
+      color: var(--text-main);
+      font-family: inherit;
       font-size: 2.5rem;
+      font-weight: 700;
       letter-spacing: -0.02em;
+      padding: 0.1rem 0.4rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .game-title::after {
+      content: '';
+      display: inline-block;
+      margin-left: 0.5rem;
+      vertical-align: 0.28em;
+      border-left: 0.3em solid transparent;
+      border-right: 0.3em solid transparent;
+      border-top: 0.34em solid var(--text-muted);
+    }
+
+    .game-title:hover::after,
+    .game-title[aria-expanded='true']::after {
+      border-top-color: var(--text-main);
+    }
+
+    .game-menu {
+      position: absolute;
+      top: calc(100% + 0.3rem);
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 12rem;
+      margin: 0;
+      padding: 0.35rem;
+      list-style: none;
+      background-color: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      z-index: 20;
+    }
+
+    .game-menu[hidden] {
+      display: none;
+    }
+
+    .game-menu li {
+      margin: 0;
+    }
+
+    .game-menu button {
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text-main);
+      font: inherit;
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .game-menu button:hover,
+    .game-menu button:focus-visible {
+      background-color: rgba(124, 92, 191, 0.25);
+      outline: none;
+    }
+
+    .game-menu button[aria-selected='true'] {
+      color: var(--accent);
+      font-weight: 600;
     }
 
     .subtitle {
@@ -59,6 +157,10 @@
       border-radius: 12px;
       padding: 1.5rem;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .rules-panel[hidden] {
+      display: none;
     }
 
     .status-panel {
@@ -292,7 +394,12 @@
 <body>
 
   <header>
-    <h1>Sync Chess</h1>
+    <div class="game-switcher">
+      <button class="game-arrow" id="game-prev" type="button" aria-label="Previous game">&#8249;</button>
+      <button class="game-title" id="game-title" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="game-menu">Sync Chess</button>
+      <button class="game-arrow" id="game-next" type="button" aria-label="Next game">&#8250;</button>
+      <ul class="game-menu" id="game-menu" role="listbox" aria-label="Games" hidden></ul>
+    </div>
   </header>
 
   <div class="container">
@@ -318,8 +425,8 @@
       </div>
     </div>
 
-    <div class="rules-panel">
-      <h2>Simultaneous Play</h2>
+    <div class="rules-panel" id="rules-sync">
+      <h2>How Sync Chess Works</h2>
       <ul>
         <li>Select a standard Chess legal move. Nothing will happen until your opponent also selects their move.</li>
         <li>If both players attempt to move their pieces to the same empty square, both pieces are removed. (This can kill the king, ending the game.)</li>
@@ -327,6 +434,16 @@
         <li>Paths may be intercepted. If your piece ends its movement in the path of the opponent's moving piece, it will be taken, but it stops the opponent's piece in that square. (Pawns, if they move 2 squares on their first move, Bishops, Rooks, and Queens are the pieces that can be intercepted. They move along their path one square at a time as the opponent moves likewise. If you try to intercept from a far distance you may not make it there in time!)</li>
         <li>Once a piece successfully captures another piece, it is "Delayed" for the next turn.</li>
         <li>If a delayed piece is selected to move, it doesn't move until after the opponent's piece has finished moving, unless it is also delayed, then they both move simultaneously as normal.</li>
+      </ul>
+    </div>
+
+    <div class="rules-panel" id="rules-chess" hidden>
+      <h2>How Chess Works</h2>
+      <ul>
+        <li>Players alternate turns, moving one piece per turn, exactly like standard chess.</li>
+        <li>Castling, en passant, and pawn promotion all follow standard chess rules.</li>
+        <li>You may not leave your own king in check, so a king can never be captured.</li>
+        <li>Checkmate wins the game; stalemate is a draw.</li>
       </ul>
     </div>
   </div>
@@ -343,8 +460,18 @@
     const TICK_MS = 450;
     const PEER_PREFIX = 'syncchess-';
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const GAMES = [
+      { id: 'sync', name: 'Sync Chess' },
+      { id: 'chess', name: 'Chess' }
+    ];
 
     const boardEl = document.getElementById('board');
+    const titleEl = document.getElementById('game-title');
+    const menuEl = document.getElementById('game-menu');
+    const rulesEl = {
+      sync: document.getElementById('rules-sync'),
+      chess: document.getElementById('rules-chess')
+    };
     const panelEl = document.getElementById('board-panel');
     const turnEl = document.getElementById('turn-indicator');
     const promoEl = document.getElementById('promotion');
@@ -356,6 +483,7 @@
 
     let nextId = 1;
     let game = null;
+    let gameKind = 'sync';
     let phase = null;
     let selected = null;
     let pending = { w: null, b: null };
@@ -373,6 +501,10 @@
     const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1];
     const squareName = ([r, c]) => FILES[c] + (8 - r);
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
+    const isSync = () => gameKind === 'sync';
+    const currentGame = () => GAMES.find(g => g.id === gameKind);
+    const activeColor = () => (localMode && !isSync() ? game.turn : myColor);
+    const gameInProgress = () => !!game && phase !== 'over';
 
     function newGame() {
       animationToken++;
@@ -389,6 +521,7 @@
         enPassant: [],
         lastMoves: [],
         captured: { w: [], b: [] },
+        turn: 'w',
         result: null
       };
       phase = 'select';
@@ -397,9 +530,13 @@
       choosingPromotion = false;
       promoEl.hidden = true;
       panelEl.hidden = false;
-      logEl.textContent = localMode
-        ? 'White picks a move first, then passes the device to Black. Both moves happen at the same time.'
-        : `You are ${SIDE[myColor]}. Pick a move; nothing happens until your opponent picks theirs.`;
+      logEl.textContent = isSync()
+        ? (localMode
+          ? 'White picks a move first, then passes the device to Black. Both moves happen at the same time.'
+          : `You are ${SIDE[myColor]}. Pick a move; nothing happens until your opponent picks theirs.`)
+        : (localMode
+          ? 'White moves first. Take turns passing the device after each move.'
+          : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`);
       updateStatus();
       render();
     }
@@ -763,6 +900,18 @@
     }
 
     function updateStatus() {
+      if (!game) return;
+      if (!isSync()) {
+        if (phase === 'select') {
+          const check = inCheck(game.board, game.turn) ? ' (Check)' : '';
+          if (localMode) setStatus(`${SIDE[game.turn]} to Move${check}`);
+          else if (game.turn === myColor) setStatus(`Your Move${check}`);
+          else setStatus('Waiting for Opponent...');
+        } else if (phase === 'over') {
+          setStatus(game.result);
+        }
+        return;
+      }
       const opp = opponent(myColor);
       if (phase === 'select') {
         if (pending[myColor]) {
@@ -780,7 +929,13 @@
     }
 
     function onSquareClick(r, c) {
-      if (phase !== 'select' || pending[myColor] || choosingPromotion) return;
+      if (phase !== 'select' || choosingPromotion) return;
+      if (isSync()) {
+        if (pending[myColor]) return;
+      } else if (!localMode && game.turn !== myColor) {
+        return;
+      }
+      const actor = activeColor();
       const piece = game.board[r][c];
       if (selected) {
         const move = selected.moves.find(m => m.tr === r && m.tc === c);
@@ -796,7 +951,7 @@
           return;
         }
       }
-      if (piece && piece.c === myColor && !(selected && selected.r === r && selected.c === c)) {
+      if (piece && piece.c === actor && !(selected && selected.r === r && selected.c === c)) {
         selected = { r, c, moves: legalMoves(game, r, c) };
       } else {
         selected = null;
@@ -806,10 +961,11 @@
 
     function askPromotion(move) {
       choosingPromotion = true;
+      const color = game.board[move.fr][move.fc].c;
       promoEl.querySelectorAll('button').forEach(b => b.remove());
       for (const t of ['q', 'r', 'b', 'n']) {
         const btn = document.createElement('button');
-        btn.textContent = GLYPHS[myColor][t];
+        btn.textContent = GLYPHS[color][t];
         btn.addEventListener('click', () => {
           promoEl.hidden = true;
           choosingPromotion = false;
@@ -822,6 +978,11 @@
 
     function lockIn(move, promo) {
       const chosen = { ...move, promo };
+      if (!isSync()) {
+        applyStandardMove(chosen);
+        send({ type: 'move', move: chosen });
+        return;
+      }
       pending[myColor] = chosen;
       if (localMode) {
         if (myColor === 'w') {
@@ -845,9 +1006,83 @@
     }
 
     function receiveMove(move) {
+      if (!isSync()) {
+        applyStandardMove(move);
+        return;
+      }
       pending[opponent(myColor)] = move;
       if (phase === 'select' && pending[myColor]) resolveTurn();
       else updateStatus();
+    }
+
+    function setLog(lines) {
+      logEl.innerHTML = '';
+      for (const line of lines) {
+        const div = document.createElement('div');
+        div.textContent = line;
+        logEl.appendChild(div);
+      }
+    }
+
+    // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
+    function applyStandardMove(move) {
+      const before = game.board;
+      const moving = before[move.fr][move.fc];
+      const fromType = moving.t;
+      const lines = [moveText(before, move)];
+
+      const target = before[move.tr][move.tc];
+      if (target) {
+        game.captured[opponent(target.c)].push(target);
+        lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
+      }
+      if (move.enPassant) {
+        const [vr, vc] = move.victim;
+        const victim = before[vr][vc];
+        if (victim) {
+          before[vr][vc] = null;
+          game.captured[opponent(victim.c)].push(victim);
+          lines.push(`${SIDE[moving.c]}'s Pawn captured ${SIDE[victim.c]}'s Pawn en passant.`);
+        }
+      }
+      if (move.castle) {
+        lines.push(`${SIDE[moving.c]} castles ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
+      }
+
+      game.board = applySingleMove(before, move);
+      if (fromType === 'p' && (move.tr === 0 || move.tr === 7)) {
+        moving.t = move.promo || 'q';
+        lines.push(`${SIDE[moving.c]}'s Pawn promoted to a ${NAMES[moving.t]}.`);
+      }
+
+      const board = game.board;
+      const sameId = (r, c) => !!(before[r][c] && board[r][c] && before[r][c].id === board[r][c].id);
+      for (const [key, row, rookCol] of [['wK', 7, 7], ['wQ', 7, 0], ['bK', 0, 7], ['bQ', 0, 0]]) {
+        game.castling[key] = game.castling[key] && sameId(row, 4) && sameId(row, rookCol);
+      }
+
+      game.enPassant = [];
+      if (fromType === 'p' && move.double) {
+        game.enPassant = [{
+          color: moving.c,
+          square: [(move.fr + move.tr) / 2, move.fc],
+          victim: [move.tr, move.tc]
+        }];
+      }
+
+      game.lastMoves = [move];
+      game.turn = opponent(moving.c);
+
+      const outcome = positionResult(board);
+      if (outcome) game.result = outcome;
+      phase = game.result ? 'over' : 'select';
+      if (game.result) lines.push(game.result);
+      else if (inCheck(board, game.turn)) lines.push(`${SIDE[game.turn]} is in check.`);
+      else if (localMode) lines.push(`${SIDE[game.turn]} to move.`);
+
+      setLog(lines);
+      updateStatus();
+      render();
     }
 
     function resolveTurn() {
@@ -877,12 +1112,28 @@
       setTimeout(step, TICK_MS);
     }
 
+    function positionResult(board) {
+      const kings = { w: findKing(board, 'w'), b: findKing(board, 'b') };
+      if (!kings.w || !kings.b) {
+        return !kings.w && !kings.b ? 'Both Kings Fell - Draw' : `King Captured - ${!kings.w ? 'Black' : 'White'} Wins`;
+      }
+      if (board.flat().every(p => !p || p.t === 'k')) return 'Only Kings Left - Stalemate';
+      const g = { ...game, board };
+      const stuck = { w: !hasAnyLegalMove(g, 'w'), b: !hasAnyLegalMove(g, 'b') };
+      const mated = { w: stuck.w && inCheck(board, 'w'), b: stuck.b && inCheck(board, 'b') };
+      if (mated.w && mated.b) return 'Both Checkmated - Draw';
+      if (mated.w) return 'Checkmate - Black Wins';
+      if (mated.b) return 'Checkmate - White Wins';
+      if (stuck.w || stuck.b) return 'Stalemate - Draw';
+      return null;
+    }
+
     function finishTurn(before, result, notation) {
       const board = result.board;
       for (const row of board) {
         for (const p of row) if (p) p.delayed = result.capturers.has(p);
       }
-      const sameId = (r, c) => before[r][c] && board[r][c] && before[r][c].id === board[r][c].id;
+      const sameId = (r, c) => !!(before[r][c] && board[r][c] && before[r][c].id === board[r][c].id);
       for (const [key, row, rookCol] of [['wK', 7, 7], ['wQ', 7, 0], ['bK', 0, 7], ['bQ', 0, 0]]) {
         game.castling[key] = game.castling[key] && sameId(row, 4) && sameId(row, rookCol);
       }
@@ -896,19 +1147,8 @@
         lines.push(delayedPieces.map(p => `${SIDE[p.c]}'s ${NAMES[p.t]}`).join(' and ') + ' will be Delayed next turn.');
       }
 
-      const kings = { w: findKing(board, 'w'), b: findKing(board, 'b') };
-      if (!kings.w || !kings.b) {
-        game.result = !kings.w && !kings.b ? 'Both Kings Fell - Draw' : `King Captured - ${!kings.w ? 'Black' : 'White'} Wins`;
-      } else if (board.flat().every(p => !p || p.t === 'k')) {
-        game.result = 'Only Kings Left - Stalemate';
-      } else {
-        const stuck = { w: !hasAnyLegalMove(game, 'w'), b: !hasAnyLegalMove(game, 'b') };
-        const mated = { w: stuck.w && inCheck(board, 'w'), b: stuck.b && inCheck(board, 'b') };
-        if (mated.w && mated.b) game.result = 'Both Checkmated - Draw';
-        else if (mated.w) game.result = 'Checkmate - Black Wins';
-        else if (mated.b) game.result = 'Checkmate - White Wins';
-        else if (stuck.w || stuck.b) game.result = 'Stalemate - Draw';
-      }
+      const outcome = positionResult(board);
+      if (outcome) game.result = outcome;
       phase = game.result ? 'over' : 'select';
       if (localMode) myColor = 'w';
 
@@ -1021,6 +1261,7 @@
         if (msg.type === 'bye') {
           opponentLeft(c);
         } else if (msg.type === 'start') {
+          setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           newGame();
         } else if (msg.type === 'move' && game) {
           receiveMove(msg.move);
@@ -1061,7 +1302,7 @@
         }
         attachConnection(c);
         c.on('open', () => {
-          c.send({ type: 'start' });
+          c.send({ type: 'start', kind: gameKind });
           newGame();
         });
       });
@@ -1106,6 +1347,79 @@
         }
       }, 15000);
     }
+
+    function setGameKind(id) {
+      gameKind = id;
+      document.title = currentGame().name;
+      titleEl.textContent = currentGame().name;
+      rulesEl.sync.hidden = !isSync();
+      rulesEl.chess.hidden = isSync();
+      if (!menuEl.hidden) buildMenu();
+    }
+
+    function buildMenu() {
+      menuEl.innerHTML = '';
+      for (const g of GAMES) {
+        const item = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = g.name;
+        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-selected', String(g.id === gameKind));
+        btn.addEventListener('click', () => selectGame(g.id));
+        item.appendChild(btn);
+        menuEl.appendChild(item);
+      }
+    }
+
+    function openMenu() {
+      buildMenu();
+      menuEl.hidden = false;
+      titleEl.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMenu() {
+      menuEl.hidden = true;
+      titleEl.setAttribute('aria-expanded', 'false');
+    }
+
+    function resetToLobby() {
+      selected = null;
+      pending = { w: null, b: null };
+      choosingPromotion = false;
+      promoEl.hidden = true;
+      logEl.textContent = '';
+      setStatus('Host or join a game');
+    }
+
+    function selectGame(id) {
+      closeMenu();
+      if (id === gameKind) return;
+      if (gameInProgress() && !confirm('Abandon the game in progress?')) return;
+      leaveGame();
+      setGameKind(id);
+      resetToLobby();
+    }
+
+    function cycleGame(dir) {
+      const i = GAMES.findIndex(g => g.id === gameKind);
+      selectGame(GAMES[(i + dir + GAMES.length) % GAMES.length].id);
+    }
+
+    titleEl.addEventListener('click', e => {
+      e.stopPropagation();
+      if (menuEl.hidden) openMenu();
+      else closeMenu();
+    });
+    document.getElementById('game-prev').addEventListener('click', () => cycleGame(-1));
+    document.getElementById('game-next').addEventListener('click', () => cycleGame(1));
+    document.addEventListener('click', e => {
+      if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeMenu();
+    });
+    setGameKind(gameKind);
 
     document.getElementById('local-btn').addEventListener('click', () => {
       leaveGame();
