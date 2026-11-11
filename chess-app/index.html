@@ -1018,8 +1018,11 @@
     const FOUR_SIDE = { r: 'Red', b: 'Blue', y: 'Yellow', g: 'Green' };
     const FOUR_ORDER = ['r', 'b', 'y', 'g'];
     const FOUR_SIZE = 14;
-    const FOUR_BACK_RIGHT = ['r', 'n', 'b', 'q', 'b', 'n', 'k', 'r'];
-    const FOUR_BACK_LEFT = ['r', 'k', 'n', 'b', 'q', 'b', 'n', 'r'];
+    // Standard back ranks as seen from each player's own left to right.
+    // White-team players have the king to the right of the queen; black-team
+    // players have it to the left, matching normal chess.
+    const FOUR_BACK_WHITE = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
+    const FOUR_BACK_BLACK = ['r', 'n', 'b', 'k', 'q', 'b', 'n', 'r'];
     const FILES = 'abcdefgh';
     const BACK_RANK = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
     const TICK_MS = 450;
@@ -1256,13 +1259,17 @@
       const place = (r, c, t, color) => { board[r][c] = makePiece(t, color); };
 
       for (let i = 0; i < 8; i++) {
-        place(13, 3 + i, FOUR_BACK_RIGHT[i], 'r');
+        // Red faces up the board: its left-to-right matches increasing columns.
+        place(13, 3 + i, FOUR_BACK_WHITE[i], 'r');
         place(12, 3 + i, 'p', 'r');
-        place(0, 3 + i, FOUR_BACK_LEFT[i], 'y');
+        // Yellow faces down, so its left-to-right runs from column 10 to column 3.
+        place(0, 3 + i, FOUR_BACK_WHITE[7 - i], 'y');
         place(1, 3 + i, 'p', 'y');
-        place(3 + i, 0, FOUR_BACK_LEFT[i], 'b');
+        // Blue faces right: its left-to-right runs from row 3 to row 10.
+        place(3 + i, 0, FOUR_BACK_BLACK[i], 'b');
         place(3 + i, 1, 'p', 'b');
-        place(3 + i, 13, FOUR_BACK_RIGHT[i], 'g');
+        // Green faces left: its left-to-right runs from row 10 to row 3.
+        place(3 + i, 13, FOUR_BACK_BLACK[7 - i], 'g');
         place(3 + i, 12, 'p', 'g');
       }
 
