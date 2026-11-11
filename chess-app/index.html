@@ -994,6 +994,8 @@
         <li>Pawns may move two squares on their first move, capture diagonally, can be taken en passant, and promote automatically to a queen on the 8th rank from their starting side. An en passant chance stays open until the double-stepping pawn&rsquo;s owner moves again, so every opponent gets one turn to take it. Castling follows normal chess rules.</li>
         <li>Scoring: checkmate +20, self-stalemate +20, opponent stalemate +10 to each other player, and checks on two or more kings at once score bonus points.</li>
         <li>Captures score 1 for a pawn or promoted pawn, 3 for a knight, 5 for a bishop or rook, and 9 for a queen. Capturing an eliminated player&rsquo;s pieces scores nothing.</li>
+        <li>A King can be captured. In Sync mode, the player who captures the most Kings that round wins; equal king captures or all four Kings captured is a draw.</li>
+        <li>In Sync mode, if two moving pieces collide in transit, both are removed. If a piece intercepts another piece that has arrived on its path, the intercepted piece is taken, the mover stops, and the mover is Delayed next round. This collision can take a teammate&rsquo;s piece.</li>
         <li>In Sync mode, all active players lock in a move before pieces travel one square at a time. Capturing an active piece delays the capturer next round until non-delayed pieces finish moving; capturing a frozen or eliminated player&rsquo;s piece does not cause a delay.</li>
         <li>When a player is checkmated or stalemated, their pieces stay on the board but are frozen and can be captured for no points.</li>
         <li>If a player resigns or runs out of time, their king stays alive and moves at random on its turns. Checkmating a zombie king scores 20 points; stalemating it gives 10 points to each remaining player.</li>
@@ -1011,6 +1013,8 @@
         <li>Checkmate and stalemate are only judged when the affected player&rsquo;s turn is reached, so another player can mate first to escape.</li>
         <li>Castling follows normal chess rules, and pawns may move two squares on their first move. En passant works too: each opponent gets one turn to take a double-stepped pawn before its owner moves again.</li>
         <li>In Sync mode, all active players lock in a move before pieces travel one square at a time. Capturing an active piece delays the capturer next round until non-delayed pieces finish moving; capturing a frozen player&rsquo;s piece does not cause a delay.</li>
+        <li>A King can be captured. In Sync mode, the team that captures more Kings that round wins; equal king captures or all four Kings captured is a draw.</li>
+        <li>In Sync mode, if two moving pieces collide in transit, both are removed. If a piece intercepts another piece that has arrived on its path, the intercepted piece is taken, the mover stops, and the mover is Delayed next round. This collision can take a teammate&rsquo;s piece.</li>
       </ul>
     </div>
   </div>
@@ -1481,7 +1485,7 @@
         if (!fourPlayable(tr, tc)) return false;
         const target = board[tr][tc];
         if (!target) return true;
-        return fourEnemy(piece.c, target.c) && target.t !== 'k';
+        return fourEnemy(piece.c, target.c);
       };
 
       if (piece.t === 'p') {
@@ -1498,7 +1502,7 @@
           const tr = r + or, tc = c + oc;
           if (!fourPlayable(tr, tc)) continue;
           const target = board[tr][tc];
-          if (target && fourEnemy(piece.c, target.c) && target.t !== 'k') add(tr, tc);
+          if (target && fourEnemy(piece.c, target.c)) add(tr, tc);
         }
         for (const ep of fourEnPassantTargets()) {
           if (ep.by === piece.c) continue;
@@ -1552,7 +1556,7 @@
             while (fourPlayable(tr, tc)) {
               const target = board[tr][tc];
               if (target) {
-                if (fourEnemy(piece.c, target.c) && target.t !== 'k') add(tr, tc);
+                if (fourEnemy(piece.c, target.c)) add(tr, tc);
                 break;
               }
               add(tr, tc);
@@ -1773,6 +1777,38 @@
       promoEl.hidden = false;
     }
 
+    function fourFinishKingCaptures(kingCaptures, lines) {
+      if (!kingCaptures.length) return false;
+      for (const capture of kingCaptures) game.states[capture.victim || capture.piece.c] = 'out';
+      const allKingsGone = FOUR_ORDER.every(color => !fourFindKing(game.board, color));
+      const results = [...lines, `Kings captured this round: ${kingCaptures.map(capture => FOUR_SIDE[capture.by]).join(', ')}.`];
+      if (allKingsGone) {
+        fourFinish(`${isFourTeam() ? '4P Teams' : '4P Chess'} - Draw (All Kings Captured)`, results, 'King Capture');
+        return true;
+      }
+      if (isFourTeam()) {
+        const counts = { white: 0, black: 0 };
+        for (const capture of kingCaptures) counts[fourTeam(capture.by)]++;
+        if (counts.white === counts.black) {
+          fourFinish('4P Teams - Draw (Equal Kings Captured)', results, 'King Capture');
+        } else {
+          const winner = counts.white > counts.black ? 'white' : 'black';
+          fourFinishTeams(winner, results, 'King Capture');
+        }
+        return true;
+      }
+      const counts = Object.fromEntries(FOUR_ORDER.map(color => [color, 0]));
+      for (const capture of kingCaptures) counts[capture.by]++;
+      const most = Math.max(...Object.values(counts));
+      const leaders = FOUR_ORDER.filter(color => counts[color] === most);
+      if (leaders.length !== 1) {
+        fourFinish('4P Chess - Draw (Equal Kings Captured)', results, 'King Capture');
+      } else {
+        fourFinish(`4P Chess - ${FOUR_SIDE[leaders[0]]} Wins by Capturing Most Kings`, results, 'King Capture');
+      }
+      return true;
+    }
+
     function applyFourMove(move, promo, zombie = false) {
       if (!game || phase === 'over') return;
       if (isSimultaneous() && !zombie) {
@@ -1791,7 +1827,9 @@
       fourPruneEnPassant(color);
 
       if (target) {
-        if (!zombie && game.states[target.c] === 'active') {
+        if (target.t === 'k') {
+          lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s King.`);
+        } else if (!zombie && game.states[target.c] === 'active') {
           const points = fourPieceValue(target);
           game.scores[color] += points;
           lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]}${move.enPassant ? ' en passant' : ''} (+${points}).`);
@@ -1836,6 +1874,11 @@
           game.scores[color] += bonus;
           lines.push(`${FOUR_SIDE[color]} checks ${checkedKings.length} kings at once (+${bonus}).`);
         }
+      }
+
+      if (target && target.t === 'k') {
+        fourFinishKingCaptures([{ by: color, victim: target.c }], lines);
+        return;
       }
 
       pushFourHistory(lines, fourMoveLabel(before, move));
@@ -1898,6 +1941,12 @@
         if (board[mover.pos[0]][mover.pos[1]] === mover.piece) board[mover.pos[0]][mover.pos[1]] = null;
       };
       const removeAction = action => movers.filter(m => m.action === action).forEach(removeMover);
+      const recordKingCollision = (victim, capturer) => {
+        if (!victim.main || victim.piece.t !== 'k') return;
+        captures.push({ by: capturer.color, piece: victim.piece, zombie: capturer.action.zombie,
+          score: false, delay: false });
+        events.push(`${FOUR_SIDE[victim.color]}'s King was lost in the collision.`);
+      };
       const place = (mover, square) => {
         board[square[0]][square[1]] = mover.piece;
         mover.pos = square;
@@ -1911,7 +1960,6 @@
         if (!active.length) break;
         const previous = new Map(active.map(m => [m, m.pos]));
         const next = new Map(active.map(m => [m, m.path[m.idx]]));
-        const placed = new Set();
         for (const mover of active) {
           if (board[mover.pos[0]][mover.pos[1]] === mover.piece) board[mover.pos[0]][mover.pos[1]] = null;
         }
@@ -1928,22 +1976,12 @@
           if (participants.length < 2) continue;
           const actionsInvolved = new Set(participants.map(m => m.action));
           if (actionsInvolved.size < 2) continue;
-          if (participants.length === 2 && isFinal(participants[0]) !== isFinal(participants[1])) {
-            const passer = isFinal(participants[0]) ? participants[1] : participants[0];
-            const blocker = passer === participants[0] ? participants[1] : participants[0];
-            const square = next.get(passer);
-            removeAction(blocker.action);
-            captures.push({ by: passer.color, piece: blocker.piece, capturer: passer.piece,
-              zombie: passer.action.zombie, score: fourEnemy(passer.color, blocker.color),
-              delay: fourEnemy(passer.color, blocker.color) && game.states[blocker.color] === 'active' });
-            events.push(`${FOUR_SIDE[blocker.color]}'s ${NAMES[blocker.piece.t]} was intercepted on ${fourSquareName(square)}.`);
-            place(passer, square);
-            passer.done = true;
-            placed.add(passer);
-          } else {
-            participants.forEach(m => removeAction(m.action));
-            events.push(`Pieces collided on ${fourSquareName(next.get(participants[0]))}; the involved movers were removed.`);
+          for (const victim of participants) {
+            const capturer = participants.find(other => other.action !== victim.action);
+            if (capturer) recordKingCollision(victim, capturer);
           }
+          participants.forEach(m => removeAction(m.action));
+          events.push(`Pieces collided on ${fourSquareName(next.get(participants[0]))}; the involved movers were removed.`);
         }
 
         for (let i = 0; i < active.length; i++) {
@@ -1953,6 +1991,8 @@
             const an = next.get(a), bn = next.get(b);
             if (an[0] === previous.get(b)[0] && an[1] === previous.get(b)[1] &&
               bn[0] === previous.get(a)[0] && bn[1] === previous.get(a)[1]) {
+              recordKingCollision(a, b);
+              recordKingCollision(b, a);
               removeAction(a.action);
               removeAction(b.action);
               events.push('Pieces collided head-on; the involved movers were removed.');
@@ -1961,7 +2001,7 @@
         }
 
         for (const mover of active) {
-          if (!mover.alive || placed.has(mover)) continue;
+          if (!mover.alive) continue;
           const square = next.get(mover);
           const target = board[square[0]][square[1]];
           if (target && fourEnemy(mover.color, target.c)) {
@@ -1978,8 +2018,12 @@
             const teammateMover = moverAt(square);
             if (teammateMover && teammateMover.action !== mover.action) {
               removeAction(teammateMover.action);
-              removeAction(mover.action);
-              events.push(`${FOUR_SIDE[mover.color]}'s ${NAMES[mover.piece.t]} collided with a teammate on ${fourSquareName(square)}.`);
+              captures.push({ by: mover.color, piece: target, capturer: mover.piece,
+                zombie: mover.action.zombie, score: false,
+                delay: game.states[target.c] === 'active' });
+              events.push(`${FOUR_SIDE[mover.color]} intercepted ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} on ${fourSquareName(square)}.`);
+              place(mover, square);
+              if (!isFinal(mover)) mover.done = true;
             } else {
               removeAction(mover.action);
               events.push(`${FOUR_SIDE[mover.color]}'s ${NAMES[mover.piece.t]} was blocked on ${fourSquareName(square)}.`);
@@ -2073,8 +2117,10 @@
       for (const capture of captures) {
         if (capture.score !== false && !capture.zombie && game.states[capture.piece.c] === 'active') {
           const points = fourPieceValue(capture.piece);
-          game.scores[capture.by] += points;
-          lines.push(`${FOUR_SIDE[capture.by]} scores ${points} points for the capture.`);
+          if (points > 0) {
+            game.scores[capture.by] += points;
+            lines.push(`${FOUR_SIDE[capture.by]} scores ${points} points for the capture.`);
+          }
         }
       }
       const successful = actions.filter(action => action.main && action.main.alive && action.main.done &&
@@ -2128,6 +2174,7 @@
         }
       }
       pushFourHistory(lines, `Round ${game.history.length}`);
+      if (fourFinishKingCaptures(captures.filter(capture => capture.piece.t === 'k'), lines)) return;
       if (isFourTeam()) {
         const activeTeams = new Set(fourSyncPlayers().map(fourTeam));
         if (activeTeams.size < 2) {
@@ -2404,7 +2451,7 @@
         const tr = king[0] + dr, tc = king[1] + dc;
         if (!fourPlayable(tr, tc)) continue;
         const target = game.board[tr][tc];
-        if (target && (target.c === color || fourSameTeam(color, target.c) || target.t === 'k')) continue;
+        if (target && (target.c === color || fourSameTeam(color, target.c))) continue;
         moves.push({ fr: king[0], fc: king[1], tr, tc });
       }
       return moves;
