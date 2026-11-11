@@ -968,7 +968,7 @@
       <h2>How 4P Chess Works</h2>
       <ul>
         <li>Four players share a 14&times;14 board, one army in each corner. Play starts with Red and goes clockwise: Red, Blue, Yellow, Green.</li>
-        <li>There is no castling and no en passant. Pawns move one square forward, capture diagonally, and promote automatically to a queen on the 8th rank from their starting side.</li>
+        <li>Pawns may move two squares on their first move, capture diagonally, can be taken en passant, and promote automatically to a queen on the 8th rank from their starting side. An en passant chance stays open until the double-stepping pawn&rsquo;s owner moves again, so every opponent gets one turn to take it. Castling follows normal chess rules.</li>
         <li>Scoring: checkmate +20, self-stalemate +20, opponent stalemate +10 to each other player, and checks on two or more kings at once score bonus points.</li>
         <li>Captures score 1 for a pawn or promoted pawn, 3 for a knight, 5 for a bishop or rook, and 9 for a queen. Capturing an eliminated player&rsquo;s pieces scores nothing.</li>
         <li>When a player is checkmated or stalemated, their pieces stay on the board but are frozen and can be captured for no points.</li>
@@ -985,7 +985,7 @@
         <li>Pawns promote on the 11th rank from their starting side, and underpromotion to a rook, bishop, or knight is allowed.</li>
         <li>Checkmate one member of the opposing team to win. Stalemating a player draws the game.</li>
         <li>Checkmate and stalemate are only judged when the affected player&rsquo;s turn is reached, so another player can mate first to escape.</li>
-        <li>There is no castling and no en passant in 4P Teams.</li>
+        <li>Castling follows normal chess rules, and pawns may move two squares on their first move. En passant works too: each opponent gets one turn to take a double-stepped pawn before its owner moves again.</li>
       </ul>
     </div>
   </div>
@@ -1233,6 +1233,54 @@
     const fourEnemy = (a, b) => a !== b && !fourSameTeam(a, b);
     const fourSquareName = ([r, c]) => String.fromCharCode(97 + c) + (FOUR_SIZE - r);
 
+    // Each player's "right" direction, the king's home square, and the rank or
+    // file its pawns start on. Used by castling, double pawn moves, and en passant.
+    const FOUR_RIGHT = { r: [0, 1], y: [0, -1], b: [1, 0], g: [-1, 0] };
+    const FOUR_KING_START = { r: [13, 7], y: [0, 6], b: [6, 0], g: [7, 13] };
+    const FOUR_PAWN_START = { r: 12, y: 1, b: 1, g: 12 };
+
+    function fourOnPawnStart(color, r, c) {
+      return color === 'r' || color === 'y' ? r === FOUR_PAWN_START[color] : c === FOUR_PAWN_START[color];
+    }
+
+    function fourCastleInfo(color, side) {
+      const [kr, kc] = FOUR_KING_START[color];
+      const [dr, dc] = FOUR_RIGHT[color];
+      const white = fourTeam(color) === 'white';
+      // In this layout kingside is always toward the player's right. The white
+      // team's king sits on the e-file, while the mirrored black-team back rank
+      // puts its king on d, so its h-rook is four squares away instead of three.
+      const sign = side === 'K' ? 1 : -1;
+      const rookDist = side === 'K' ? (white ? 3 : 4) : (white ? 4 : 3);
+      const pos = offset => [kr + dr * offset, kc + dc * offset];
+      return { kingTo: pos(sign * 2), rookFrom: pos(sign * rookDist), rookTo: pos(sign) };
+    }
+
+    function fourCastlingRights() {
+      const rights = {};
+      for (const color of FOUR_ORDER) rights[color] = { K: true, Q: true };
+      return rights;
+    }
+
+    function fourClearBetween(board, from, to) {
+      const dr = Math.sign(to[0] - from[0]);
+      const dc = Math.sign(to[1] - from[1]);
+      let r = from[0] + dr;
+      let c = from[1] + dc;
+      while (r !== to[0] || c !== to[1]) {
+        if (!fourPlayable(r, c) || board[r][c]) return false;
+        r += dr;
+        c += dc;
+      }
+      return true;
+    }
+
+    function fourAttackedAfterKingLeaves(board, r, c, color, kingFrom) {
+      const test = board.map(row => row.slice());
+      test[kingFrom[0]][kingFrom[1]] = null;
+      return fourSquareAttacked(test, r, c, color, game.states);
+    }
+
     function fourPromoRank(color) {
       if (isFourTeam()) return color === 'r' ? 3 : color === 'y' ? 10 : color === 'b' ? 10 : 3;
       return color === 'r' ? 6 : color === 'y' ? 7 : color === 'b' ? 7 : 6;
@@ -1278,6 +1326,8 @@
         turn: 'r',
         states: { r: 'active', b: 'active', y: 'active', g: 'active' },
         scores: { r: 0, b: 0, y: 0, g: 0 },
+        castling: fourCastlingRights(),
+        enPassant: [],
         lastMoves: [],
         lastMover: null,
         idle: 0,
@@ -1387,8 +1437,8 @@
       const piece = board[r][c];
       if (!piece || game.states[piece.c] !== 'active') return [];
       const moves = [];
-      const add = (tr, tc) => {
-        const move = { fr: r, fc: c, tr, tc };
+      const add = (tr, tc, extra = null) => {
+        const move = { fr: r, fc: c, tr, tc, ...(extra || {}) };
         if (piece.t === 'p' && fourAtPromotion(piece.c, tr, tc)) move.promotion = true;
         moves.push(move);
       };
@@ -1402,18 +1452,62 @@
       if (piece.t === 'p') {
         const [dr, dc] = FOUR_FORWARD[piece.c];
         const fr = r + dr, fc = c + dc;
-        if (fourPlayable(fr, fc) && !board[fr][fc]) add(fr, fc);
+        if (fourPlayable(fr, fc) && !board[fr][fc]) {
+          add(fr, fc);
+          if (fourOnPawnStart(piece.c, r, c)) {
+            const tr = r + dr * 2, tc = c + dc * 2;
+            if (fourPlayable(tr, tc) && !board[tr][tc]) add(tr, tc, { double: true });
+          }
+        }
         for (const [or, oc] of FOUR_PAWN_CAPTURES[piece.c]) {
           const tr = r + or, tc = c + oc;
           if (!fourPlayable(tr, tc)) continue;
           const target = board[tr][tc];
           if (target && fourEnemy(piece.c, target.c) && target.t !== 'k') add(tr, tc);
         }
-      } else if (piece.t === 'n' || piece.t === 'k') {
-        const steps = piece.t === 'n' ? FOUR_KNIGHT_STEPS : FOUR_KING_STEPS;
-        for (const [dr, dc] of steps) {
+        for (const ep of fourEnPassantTargets()) {
+          if (ep.by === piece.c) continue;
+          const originState = game.states[ep.by];
+          if (originState !== 'active' && originState !== 'zombie') continue;
+          const [vr, vc] = ep.victim;
+          const victim = board[vr][vc];
+          if (!victim || victim.t !== 'p' || victim.c !== ep.by || !fourEnemy(piece.c, victim.c)) continue;
+          // Capture onto the square the double-stepping pawn crossed, which is
+          // the midpoint of its two-square move. This works for every pairing
+          // of pawn orientations, not just pawns moving opposite each other.
+          const [vdr, vdc] = FOUR_FORWARD[victim.c];
+          const destR = vr - vdr, destC = vc - vdc;
+          const attacks = FOUR_PAWN_CAPTURES[piece.c]
+            .some(([or, oc]) => r + or === destR && c + oc === destC);
+          if (attacks && fourPlayable(destR, destC) && !board[destR][destC] &&
+            !moves.some(m => m.tr === destR && m.tc === destC)) {
+            add(destR, destC, { enPassant: [vr, vc] });
+          }
+        }
+      } else if (piece.t === 'n') {
+        for (const [dr, dc] of FOUR_KNIGHT_STEPS) {
           const tr = r + dr, tc = c + dc;
           if (canLand(tr, tc)) add(tr, tc);
+        }
+      } else if (piece.t === 'k') {
+        for (const [dr, dc] of FOUR_KING_STEPS) {
+          const tr = r + dr, tc = c + dc;
+          if (canLand(tr, tc)) add(tr, tc);
+        }
+        const rights = game.castling && game.castling[piece.c];
+        const home = FOUR_KING_START[piece.c];
+        if (rights && r === home[0] && c === home[1] && !fourInCheck(board, piece.c)) {
+          for (const side of ['K', 'Q']) {
+            if (!rights[side]) continue;
+            const info = fourCastleInfo(piece.c, side);
+            const rook = board[info.rookFrom[0]][info.rookFrom[1]];
+            if (!rook || rook.c !== piece.c || rook.t !== 'r') continue;
+            if (!fourClearBetween(board, [r, c], info.rookFrom)) continue;
+            const mid = [(r + info.kingTo[0]) / 2, (c + info.kingTo[1]) / 2];
+            if (fourAttackedAfterKingLeaves(board, mid[0], mid[1], piece.c, [r, c])) continue;
+            if (fourAttackedAfterKingLeaves(board, info.kingTo[0], info.kingTo[1], piece.c, [r, c])) continue;
+            add(info.kingTo[0], info.kingTo[1], { castle: side, rookFrom: info.rookFrom, rookTo: info.rookTo });
+          }
         }
       } else {
         for (const { dirs, types } of FOUR_RAYS) {
@@ -1444,9 +1538,55 @@
       if (piece.t === 'p' && promo && fourAtPromotion(piece.c, move.tr, move.tc)) {
         placed = { ...piece, t: promo, promoted: true };
       }
+      if (move.enPassant) next[move.enPassant[0]][move.enPassant[1]] = null;
+      if (move.castle) {
+        const info = fourCastleInfo(piece.c, move.castle);
+        const rookFrom = move.rookFrom || info.rookFrom;
+        const rookTo = move.rookTo || info.rookTo;
+        const rook = next[rookFrom[0]][rookFrom[1]];
+        next[rookFrom[0]][rookFrom[1]] = null;
+        next[rookTo[0]][rookTo[1]] = rook;
+      }
       next[move.tr][move.tc] = placed;
       next[move.fr][move.fc] = null;
       return next;
+    }
+
+    function fourSyncCastling() {
+      if (!game.castling) return;
+      for (const color of FOUR_ORDER) {
+        const [kr, kc] = FOUR_KING_START[color];
+        const king = game.board[kr][kc];
+        if (!king || king.c !== color || king.t !== 'k') {
+          game.castling[color] = { K: false, Q: false };
+          continue;
+        }
+        for (const side of ['K', 'Q']) {
+          if (!game.castling[color][side]) continue;
+          const info = fourCastleInfo(color, side);
+          const rook = game.board[info.rookFrom[0]][info.rookFrom[1]];
+          if (!rook || rook.c !== color || rook.t !== 'r') game.castling[color][side] = false;
+        }
+      }
+    }
+
+    function fourEnPassantTargets() {
+      if (Array.isArray(game.enPassant)) return game.enPassant;
+      return game.enPassant ? [game.enPassant] : [];
+    }
+
+    // En passant stays open for a full round: every other player gets one turn
+    // to capture. A target expires when the double-stepping pawn's owner is due
+    // to move again, when its pawn is gone, or when that player is no longer active.
+    function fourPruneEnPassant(expireColor = null) {
+      if (!game) return;
+      game.enPassant = fourEnPassantTargets().filter(ep => {
+        if (expireColor !== null && ep.by === expireColor) return false;
+        const victim = game.board[ep.victim[0]][ep.victim[1]];
+        if (!victim || victim.t !== 'p' || victim.c !== ep.by) return false;
+        const state = game.states[ep.by];
+        return state === 'active' || state === 'zombie';
+      });
     }
 
     function fourLegalMoves(board, r, c) {
@@ -1506,7 +1646,9 @@
       const piece = before[move.fr][move.fc];
       if (!piece) return 'Move';
       const promo = move.promotion ? '=' + (move.promo || 'q').toUpperCase() : '';
-      return `${FOUR_SIDE[piece.c]} ${NAMES[piece.t]} ${fourSquareName([move.fr, move.fc])}-${fourSquareName([move.tr, move.tc])}${promo}`;
+      const castle = move.castle ? (move.castle === 'K' ? ' O-O' : ' O-O-O') : '';
+      const ep = move.enPassant ? ' e.p.' : '';
+      return `${FOUR_SIDE[piece.c]} ${NAMES[piece.t]} ${fourSquareName([move.fr, move.fc])}-${fourSquareName([move.tr, move.tc])}${promo}${castle}${ep}`;
     }
 
     function pushFourHistory(lines, label) {
@@ -1571,15 +1713,17 @@
       if (!moving) return;
       const color = moving.c;
       const fromType = moving.t;
-      const target = game.board[move.tr][move.tc];
+      const captureSquare = move.enPassant ? move.enPassant : [move.tr, move.tc];
+      const target = game.board[captureSquare[0]][captureSquare[1]];
       const lines = [fourMoveLabel(before, move)];
       syncClock();
+      fourPruneEnPassant(color);
 
       if (target) {
         if (!zombie && game.states[target.c] === 'active') {
           const points = fourPieceValue(target);
           game.scores[color] += points;
-          lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} (+${points}).`);
+          lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]}${move.enPassant ? ' en passant' : ''} (+${points}).`);
         } else if (!zombie) {
           lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s frozen ${NAMES[target.t]} for no points.`);
         } else {
@@ -1596,6 +1740,18 @@
       if (fromType === 'p' && move.promotion) {
         lines.push(`${FOUR_SIDE[color]}'s Pawn promoted to a ${NAMES[placed.t]}.`);
       }
+      if (move.castle) {
+        lines.push(`${FOUR_SIDE[color]} castled ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
+      }
+      fourPruneEnPassant();
+      const pawnJump =
+        (Math.abs(move.tr - move.fr) === 2 && move.tc === move.fc) ||
+        (Math.abs(move.tc - move.fc) === 2 && move.tr === move.fr);
+      if (!zombie && fromType === 'p' && !move.enPassant && pawnJump &&
+        !game.enPassant.some(ep => ep.victim[0] === move.tr && ep.victim[1] === move.tc)) {
+        game.enPassant.push({ by: color, victim: [move.tr, move.tc] });
+      }
+      fourSyncCastling();
       game.lastMoves = [{ ...move, promo }];
       game.lastMover = color;
 
@@ -1669,6 +1825,10 @@
         next = nextFourColor(next);
       }
       game.turn = next;
+      // The en passant window closes as soon as the double-stepping pawn's
+      // owner is due to move again, even if that player ends up frozen or
+      // checkmated on arrival and never actually moves.
+      fourPruneEnPassant(next);
       selected = null;
       fourEvaluateTurn();
     }
@@ -1951,7 +2111,10 @@
             continue;
           }
           sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
-          if (lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
+          if (lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c) ||
+            (m.rookFrom && m.rookFrom[0] === r && m.rookFrom[1] === c) ||
+            (m.rookTo && m.rookTo[0] === r && m.rookTo[1] === c) ||
+            (Array.isArray(m.enPassant) && m.enPassant[0] === r && m.enPassant[1] === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           if (checked.some(([kr, kc]) => kr === r && kc === c)) sq.classList.add('in-check');
           const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
