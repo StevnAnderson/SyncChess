@@ -1350,6 +1350,7 @@
         enPassant: [],
         lastMoves: [],
         lastMover: null,
+        roundMoves: {},
         idle: 0,
         result: null,
         clock: createClock(controls, FOUR_ORDER),
@@ -1371,7 +1372,11 @@
       reviewBtnEl.hidden = true;
       panelEl.hidden = false;
 
-      const intro = isFourTeam()
+      const intro = isSimultaneous()
+        ? (isFourTeam()
+          ? 'Sync round: Red, Blue, Yellow, and Green each choose a move. The moves resolve together after every active player is ready.'
+          : 'Sync round: Red, Blue, Yellow, and Green each choose a move. Captures and scores resolve together after every active player is ready.')
+        : isFourTeam()
         ? 'Teams: Red and Yellow (White Team) play Blue and Green (Black Team). Teammates sit opposite each other. Red moves first.'
         : 'Red moves first, then Blue, Yellow, and Green clockwise. Checkmates and captures score points; highest score wins.';
       logEl.textContent = intro;
@@ -1686,6 +1691,8 @@
 
     function onFourSquareClick(r, c) {
       if (!game || !localMode || reviewing || phase !== 'select' || choosingPromotion) return;
+      const color = game.turn;
+      if (isSimultaneous() && game.roundMoves[color]) return;
       if (fourVoid(r, c) || game.states[game.turn] !== 'active') return;
       const piece = game.board[r][c];
       if (selected) {
@@ -1701,12 +1708,42 @@
           return;
         }
       }
-      if (piece && piece.c === game.turn && game.states[piece.c] === 'active') {
+      if (piece && piece.c === color && game.states[piece.c] === 'active') {
         selected = { r, c, moves: fourLegalMoves(game.board, r, c) };
       } else {
         selected = null;
       }
       render();
+    }
+
+    function fourSyncPlayers() {
+      return FOUR_ORDER.filter(color => game.states[color] === 'active');
+    }
+
+    function submitFourMove(move, promo) {
+      const color = game.turn;
+      syncClock();
+      game.roundMoves[color] = { ...move, promo };
+      addIncrement(color);
+      selected = null;
+      choosingPromotion = false;
+      promoEl.hidden = true;
+
+      const players = fourSyncPlayers();
+      if (players.every(player => game.roundMoves[player])) {
+        resolveFourRound();
+        return;
+      }
+      let next = nextFourColor(color);
+      let guard = 0;
+      while ((!players.includes(next) || game.roundMoves[next]) && guard++ < FOUR_ORDER.length) {
+        next = nextFourColor(next);
+      }
+      game.turn = next;
+      setLog([`${FOUR_SIDE[color]} locked in a move. Pass the device to ${FOUR_SIDE[next]}.`]);
+      updateStatus();
+      render();
+      startClockForTurn();
     }
 
     function askFourPromotion(move) {
@@ -1728,6 +1765,10 @@
 
     function applyFourMove(move, promo, zombie = false) {
       if (!game || phase === 'over') return;
+      if (isSimultaneous() && !zombie) {
+        submitFourMove(move, promo);
+        return;
+      }
       const before = cloneBoard(game.board);
       const moving = game.board[move.fr][move.fc];
       if (!moving) return;
@@ -1790,6 +1831,188 @@
       pushFourHistory(lines, fourMoveLabel(before, move));
       setLog(lines);
       fourAdvanceTurn();
+    }
+
+    function resolveFourRound() {
+      const before = game.board;
+      const actions = fourSyncPlayers().map(color => ({
+        color,
+        move: { ...game.roundMoves[color] },
+        zombie: false
+      }));
+      for (const color of FOUR_ORDER) {
+        if (game.states[color] !== 'zombie') continue;
+        const options = fourZombieMoves(color);
+        if (options.length) actions.push({
+          color,
+          move: options[Math.floor(Math.random() * options.length)],
+          zombie: true
+        });
+      }
+
+      const collisions = new Set();
+      const destinations = new Map();
+      for (const action of actions) {
+        const key = `${action.move.tr},${action.move.tc}`;
+        if (!destinations.has(key)) destinations.set(key, []);
+        destinations.get(key).push(action);
+      }
+      for (const group of destinations.values()) {
+        if (group.length > 1) group.forEach(action => collisions.add(action));
+      }
+      for (let i = 0; i < actions.length; i++) {
+        for (let j = i + 1; j < actions.length; j++) {
+          const a = actions[i].move, b = actions[j].move;
+          if (a.tr === b.fr && a.tc === b.fc && b.tr === a.fr && b.tc === a.fc) {
+            collisions.add(actions[i]);
+            collisions.add(actions[j]);
+          }
+        }
+      }
+
+      const successful = actions.filter(action => !collisions.has(action));
+      const departing = new Set(successful.map(action => before[action.move.fr][action.move.fc]?.id));
+      for (const action of successful) {
+        if (action.move.castle && action.move.rookFrom) {
+          const rook = before[action.move.rookFrom[0]][action.move.rookFrom[1]];
+          if (rook) departing.add(rook.id);
+        }
+      }
+      const board = cloneBoard(before);
+      for (const action of actions) {
+        board[action.move.fr][action.move.fc] = null;
+        if (action.move.castle && action.move.rookFrom && collisions.has(action)) {
+          const [rr, rc] = action.move.rookFrom;
+          const rook = board[rr][rc];
+          if (rook && rook.c === action.color) board[rr][rc] = null;
+        }
+      }
+
+      const lines = [];
+      const newEnPassant = [];
+      let resetIdle = false;
+      for (const action of actions) {
+        const { color, move, zombie } = action;
+        const piece = before[move.fr][move.fc];
+        if (!piece) continue;
+        lines.push(fourMoveLabel(before, move));
+        if (collisions.has(action)) {
+          lines.push(`${FOUR_SIDE[color]}'s ${NAMES[piece.t]} collided with another move and was removed.`);
+          resetIdle = true;
+          continue;
+        }
+        const captureAt = move.enPassant || [move.tr, move.tc];
+        const target = before[captureAt[0]][captureAt[1]];
+        if (target && target.c !== color && !departing.has(target.id)) {
+          board[captureAt[0]][captureAt[1]] = null;
+          if (!zombie && game.states[target.c] === 'active') {
+            const points = fourPieceValue(target);
+            game.scores[color] += points;
+            lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]}${move.enPassant ? ' en passant' : ''} (+${points}).`);
+          } else if (!zombie) {
+            lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s frozen ${NAMES[target.t]} for no points.`);
+          }
+          resetIdle = true;
+        }
+        let placed = piece;
+        if (piece.t === 'p' && move.promo && fourAtPromotion(color, move.tr, move.tc)) {
+          placed = { ...piece, t: move.promo, promoted: true };
+          lines.push(`${FOUR_SIDE[color]}'s Pawn promoted to a ${NAMES[move.promo]}.`);
+        }
+        board[move.tr][move.tc] = placed;
+        if (move.castle && move.rookFrom && move.rookTo) {
+          board[move.rookTo[0]][move.rookTo[1]] = before[move.rookFrom[0]][move.rookFrom[1]];
+          board[move.rookFrom[0]][move.rookFrom[1]] = null;
+          lines.push(`${FOUR_SIDE[color]} castled ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
+        }
+        if (piece.t === 'p') resetIdle = true;
+        if (!zombie && piece.t === 'p' && move.double) {
+          newEnPassant.push({ by: color, victim: [move.tr, move.tc] });
+        }
+      }
+
+      game.board = board;
+      game.enPassant = newEnPassant;
+      game.idle = resetIdle ? 0 : game.idle + Math.max(1, successful.length);
+      game.lastMoves = successful.map(action => ({ ...action.move }));
+      game.lastMover = successful.length ? successful[successful.length - 1].color : null;
+      fourSyncCastling();
+      for (const action of successful) {
+        if (action.zombie) continue;
+        const checkedKings = fourKingsCheckedBy(action.color, action.move.tr, action.move.tc);
+        if (checkedKings.length >= 2) {
+          const moved = board[action.move.tr][action.move.tc];
+          const bonus = moved && moved.t === 'q'
+            ? (checkedKings.length >= 3 ? 5 : 2)
+            : (checkedKings.length >= 3 ? 20 : 5);
+          game.scores[action.color] += bonus;
+          lines.push(`${FOUR_SIDE[action.color]} checks ${checkedKings.length} kings at once (+${bonus}).`);
+        }
+      }
+      if (!lines.length) lines.push('All selected moves resolved.');
+      game.roundMoves = {};
+
+      const outcomes = FOUR_ORDER.filter(color => game.states[color] === 'active')
+        .map(color => ({ color, checked: fourInCheck(board, color), hasMove: fourHasLegalMove(color) }))
+        .filter(outcome => !outcome.hasMove);
+      for (const outcome of outcomes) {
+        const { color, checked } = outcome;
+        if (isFourTeam()) {
+          if (checked) {
+            const winner = fourTeam(color) === 'white' ? 'black' : 'white';
+            fourFinishTeams(winner, [`${FOUR_SIDE[color]} is checkmated.`], 'Checkmate');
+          } else {
+            fourFinish('4P Teams - Draw (Stalemate)', [`${FOUR_SIDE[color]} is stalemated.`], 'Stalemate');
+          }
+          return;
+        }
+        if (checked) {
+          const scorer = game.lastMover && game.lastMover !== color && game.states[game.lastMover] === 'active'
+            ? game.lastMover
+            : null;
+          game.states[color] = 'frozen';
+          if (scorer) {
+            game.scores[scorer] += 20;
+            lines.push(`${FOUR_SIDE[color]} is checkmated. ${FOUR_SIDE[scorer]} scores 20 points.`);
+          } else {
+            lines.push(`${FOUR_SIDE[color]} is checkmated and eliminated.`);
+          }
+        } else {
+          game.states[color] = 'frozen';
+          game.scores[color] += 20;
+          lines.push(`${FOUR_SIDE[color]} is stalemated: +20 points.`);
+          for (const other of FOUR_ORDER) {
+            if (other !== color && game.states[other] === 'active') {
+              game.scores[other] += 10;
+              lines.push(`${FOUR_SIDE[other]} receives 10 points.`);
+            }
+          }
+        }
+      }
+      pushFourHistory(lines, `Round ${game.history.length}`);
+      if (isFourTeam()) {
+        const activeTeams = new Set(fourSyncPlayers().map(fourTeam));
+        if (activeTeams.size < 2) {
+          if (!activeTeams.size) fourFinish('4P Teams - Draw', ['Neither team has an active player left.'], 'Draw');
+          else fourFinishTeams([...activeTeams][0], ['The other team has no active players left.'], 'Team Eliminated');
+          return;
+        }
+      } else if (fourSyncPlayers().length <= 1) {
+        setLog(lines);
+        fourFinishFfa();
+        return;
+      }
+      const draw = fourDrawDue();
+      if (draw) {
+        setLog(lines);
+        fourHandleDraw(draw);
+        return;
+      }
+      game.turn = fourSyncPlayers()[0] || FOUR_ORDER.find(color => game.states[color] === 'zombie') || 'r';
+      setLog(lines);
+      updateStatus();
+      render();
+      startClockForTurn();
     }
 
     function fourActiveCount() {
@@ -1931,6 +2154,34 @@
       const lines = [reason, `${FOUR_SIDE[color]}'s king remains and will move at random.`];
       pushFourHistory(lines, `${FOUR_SIDE[color]} Zombie`);
       setLog(lines);
+      if (isSimultaneous()) {
+        if (isFourTeam()) {
+          const teams = new Set(fourSyncPlayers().map(fourTeam));
+          if (teams.size < 2) {
+            if (!teams.size) fourFinish('4P Teams - Draw', ['Neither team has an active player left.'], 'Draw');
+            else fourFinishTeams([...teams][0], ['The other team has no active players left.'], 'Team Eliminated');
+            return;
+          }
+        } else if (fourSyncPlayers().length <= 1) {
+          fourFinishFfa();
+          return;
+        }
+        const players = fourSyncPlayers();
+        if (players.every(player => game.roundMoves[player])) {
+          resolveFourRound();
+          return;
+        }
+        if (!players.includes(game.turn) || game.roundMoves[game.turn]) {
+          let next = game.turn;
+          let guard = 0;
+          do { next = nextFourColor(next); } while ((!players.includes(next) || game.roundMoves[next]) && guard++ < FOUR_ORDER.length);
+          game.turn = next;
+        }
+        updateStatus();
+        render();
+        startClockForTurn();
+        return;
+      }
       if (game.turn === color) {
         fourAdvanceTurn();
       } else {
@@ -2172,7 +2423,9 @@
         name.appendChild(document.createTextNode(FOUR_SIDE[color] + (isFourTeam() ? ` · ${fourTeam(color) === 'white' ? 'White' : 'Black'} Team` : '')));
         const stateEl = document.createElement('span');
         stateEl.className = 'four-state';
-        stateEl.textContent = state === 'active' ? '' : state === 'zombie' ? 'Zombie' : state === 'out' ? 'Out' : 'Frozen';
+        stateEl.textContent = !entry && game.roundMoves && game.roundMoves[color]
+          ? 'Ready'
+          : state === 'active' ? '' : state === 'zombie' ? 'Zombie' : state === 'out' ? 'Out' : 'Frozen';
         const time = document.createElement('span');
         time.className = 'four-time';
         time.textContent = game.clock ? clockText(game.clock.remaining[color]) : '--:--';
@@ -2259,11 +2512,15 @@
         setClockActive([]);
         return;
       }
-      if (isSimultaneous()) {
+      if (isFour()) {
+        if (isSimultaneous()) {
+          setClockActive(FOUR_ORDER.filter(color => game.states[color] === 'active' && !game.roundMoves[color]));
+        } else {
+          const state = game.states ? game.states[game.turn] : 'active';
+          setClockActive(state === 'active' ? [game.turn] : []);
+        }
+      } else if (isSimultaneous()) {
         setClockActive(['w', 'b'].filter(color => !pending[color]));
-      } else if (isFour()) {
-        const state = game.states ? game.states[game.turn] : 'active';
-        setClockActive(state === 'active' ? [game.turn] : []);
       } else if (isDark() && localMode && (handoff || reviewing || handoffTimer !== null)) {
         setClockActive([]);
       } else {
@@ -2799,6 +3056,14 @@
       if (!game) return;
       if (isFour()) {
         if (phase === 'select') {
+          if (isSimultaneous()) {
+            const players = fourSyncPlayers();
+            const ready = players.filter(color => game.roundMoves[color]).length;
+            setStatus(game.roundMoves[game.turn]
+              ? `${FOUR_SIDE[game.turn]} has locked in a move · ${ready}/${players.length} ready`
+              : `${FOUR_SIDE[game.turn]}: Choose a Move · ${ready}/${players.length} ready`);
+            return;
+          }
           const state = game.states ? game.states[game.turn] : 'active';
           if (state === 'zombie') {
             setStatus(`${FOUR_SIDE[game.turn]} (zombie) is moving...`);
@@ -3503,7 +3768,7 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync' || isFour();
+      syncModeOptionEl.hidden = gameKind === 'sync';
       syncModeInputEl.checked = simultaneousMode;
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
@@ -3677,7 +3942,7 @@
     timeStartEl.addEventListener('click', () => {
       const action = pendingAction;
       const controls = collectTimeControls();
-      simultaneousMode = gameKind === 'sync' || (!isFour() && syncModeInputEl.checked);
+      simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
