@@ -435,6 +435,14 @@
       text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
     }
 
+    .board.four .delayed-badge {
+      width: 0.75rem;
+      height: 0.75rem;
+      top: 1px;
+      right: 1px;
+      font-size: 0.5rem;
+    }
+
     .square.void {
       background: transparent;
       cursor: default;
@@ -986,6 +994,7 @@
         <li>Pawns may move two squares on their first move, capture diagonally, can be taken en passant, and promote automatically to a queen on the 8th rank from their starting side. An en passant chance stays open until the double-stepping pawn&rsquo;s owner moves again, so every opponent gets one turn to take it. Castling follows normal chess rules.</li>
         <li>Scoring: checkmate +20, self-stalemate +20, opponent stalemate +10 to each other player, and checks on two or more kings at once score bonus points.</li>
         <li>Captures score 1 for a pawn or promoted pawn, 3 for a knight, 5 for a bishop or rook, and 9 for a queen. Capturing an eliminated player&rsquo;s pieces scores nothing.</li>
+        <li>In Sync mode, all active players lock in a move before pieces travel one square at a time. Capturing an active piece delays the capturer next round until non-delayed pieces finish moving; capturing a frozen or eliminated player&rsquo;s piece does not cause a delay.</li>
         <li>When a player is checkmated or stalemated, their pieces stay on the board but are frozen and can be captured for no points.</li>
         <li>If a player resigns or runs out of time, their king stays alive and moves at random on its turns. Checkmating a zombie king scores 20 points; stalemating it gives 10 points to each remaining player.</li>
         <li>When three players are eliminated, the highest score wins &mdash; you can win even if you were eliminated first.</li>
@@ -1001,6 +1010,7 @@
         <li>Checkmate one member of the opposing team to win. Stalemating a player draws the game.</li>
         <li>Checkmate and stalemate are only judged when the affected player&rsquo;s turn is reached, so another player can mate first to escape.</li>
         <li>Castling follows normal chess rules, and pawns may move two squares on their first move. En passant works too: each opponent gets one turn to take a double-stepped pawn before its owner moves again.</li>
+        <li>In Sync mode, all active players lock in a move before pieces travel one square at a time. Capturing an active piece delays the capturer next round until non-delayed pieces finish moving; capturing a frozen player&rsquo;s piece does not cause a delay.</li>
       </ul>
     </div>
   </div>
@@ -1878,6 +1888,10 @@
         }
       }
       const moverAt = square => movers.find(m => m.alive && m.pos[0] === square[0] && m.pos[1] === square[1]);
+      const hasNonDelayedMove = actions.some(action => action.main && !action.main.piece.delayed);
+      const isWaiting = mover => mover.action.main && mover.action.main.piece.delayed && hasNonDelayedMove &&
+        actions.some(action => action !== mover.action && action.main && !action.main.piece.delayed &&
+          action.main.alive && !action.main.done);
       const removeMover = mover => {
         mover.alive = false;
         mover.done = true;
@@ -1893,7 +1907,7 @@
       const isFinal = mover => mover.idx === mover.path.length - 1;
 
       for (let tick = 0; tick < FOUR_SIZE * 2; tick++) {
-        const active = movers.filter(m => m.alive && !m.done);
+        const active = movers.filter(m => m.alive && !m.done && !isWaiting(m));
         if (!active.length) break;
         const previous = new Map(active.map(m => [m, m.pos]));
         const next = new Map(active.map(m => [m, m.path[m.idx]]));
@@ -1919,8 +1933,9 @@
             const blocker = passer === participants[0] ? participants[1] : participants[0];
             const square = next.get(passer);
             removeAction(blocker.action);
-            captures.push({ by: passer.color, piece: blocker.piece, zombie: passer.action.zombie,
-              score: fourEnemy(passer.color, blocker.color) });
+            captures.push({ by: passer.color, piece: blocker.piece, capturer: passer.piece,
+              zombie: passer.action.zombie, score: fourEnemy(passer.color, blocker.color),
+              delay: fourEnemy(passer.color, blocker.color) && game.states[blocker.color] === 'active' });
             events.push(`${FOUR_SIDE[blocker.color]}'s ${NAMES[blocker.piece.t]} was intercepted on ${fourSquareName(square)}.`);
             place(passer, square);
             passer.done = true;
@@ -1953,7 +1968,9 @@
             const victimMover = moverAt(square);
             if (victimMover && victimMover.action !== mover.action) removeAction(victimMover.action);
             else board[square[0]][square[1]] = null;
-            captures.push({ by: mover.color, piece: target, zombie: mover.action.zombie, score: true });
+            captures.push({ by: mover.color, piece: target, capturer: mover.piece,
+              zombie: mover.action.zombie, score: true,
+              delay: game.states[target.c] === 'active' });
             events.push(`${FOUR_SIDE[mover.color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} on ${fourSquareName(square)}.`);
             place(mover, square);
             if (!isFinal(mover)) mover.done = true;
@@ -1981,7 +1998,9 @@
               const victimMover = moverAt([vr, vc]);
               if (victimMover) removeAction(victimMover.action);
               else board[vr][vc] = null;
-              captures.push({ by: mover.color, piece: victim, zombie: mover.action.zombie, score: true });
+              captures.push({ by: mover.color, piece: victim, capturer: mover.piece,
+                zombie: mover.action.zombie, score: true,
+                delay: game.states[victim.c] === 'active' });
               events.push(`${FOUR_SIDE[mover.color]} captured ${FOUR_SIDE[victim.c]}'s Pawn en passant.`);
             }
           }
@@ -2042,6 +2061,15 @@
       game.enPassant = enPassant;
       const lines = actions.map(action => fourMoveLabel(before, action.move));
       lines.push(...events);
+      const delayedCapturers = new Set(captures.filter(capture => capture.delay).map(capture => capture.capturer.id));
+      for (const row of board) {
+        for (const piece of row) if (piece) piece.delayed = delayedCapturers.has(piece.id);
+      }
+      const delayedPieces = board.flat().filter(piece => piece && piece.delayed);
+      if (delayedPieces.length) {
+        lines.push(delayedPieces.map(piece => `${FOUR_SIDE[piece.c]}'s ${NAMES[piece.t]}`).join(' and ') +
+          ' will be Delayed next round.');
+      }
       for (const capture of captures) {
         if (capture.score !== false && !capture.zombie && game.states[capture.piece.c] === 'active') {
           const points = fourPieceValue(capture.piece);
@@ -2511,6 +2539,13 @@
             span.className = 'piece ' + piece.c;
             span.textContent = FOUR_GLYPHS[piece.c][piece.t];
             sq.appendChild(span);
+            if (!entry && phase === 'select' && piece.delayed) {
+              const badge = document.createElement('span');
+              badge.className = 'delayed-badge';
+              badge.textContent = 'D';
+              badge.title = 'Delayed: moves after non-delayed pieces this round';
+              sq.appendChild(badge);
+            }
           }
           sq.addEventListener('click', () => onFourSquareClick(r, c));
           boardEl.appendChild(sq);
