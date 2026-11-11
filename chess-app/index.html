@@ -1833,106 +1833,226 @@
       fourAdvanceTurn();
     }
 
+    function buildFourPath(move, piece) {
+      const dr = Math.sign(move.tr - move.fr);
+      const dc = Math.sign(move.tc - move.fc);
+      const sliding = 'rbq'.includes(piece.t) || (piece.t === 'p' && move.double);
+      if (!sliding) return [[move.tr, move.tc]];
+      const path = [];
+      let r = move.fr + dr, c = move.fc + dc;
+      while (true) {
+        path.push([r, c]);
+        if (r === move.tr && c === move.tc) break;
+        r += dr;
+        c += dc;
+      }
+      return path;
+    }
+
+    function simulateFourRound(actions) {
+      const before = cloneBoard(game.board);
+      const board = cloneBoard(game.board);
+      const movers = [];
+      const frames = [];
+      const events = [];
+      const captures = [];
+      for (const action of actions) {
+        const piece = board[action.move.fr][action.move.fc];
+        if (!piece) continue;
+        const main = {
+          action, piece, color: action.color, main: true,
+          pos: [action.move.fr, action.move.fc], path: buildFourPath(action.move, piece),
+          idx: 0, alive: true, done: false, targetsPiece: !!board[action.move.tr][action.move.tc]
+        };
+        action.main = main;
+        movers.push(main);
+        if (action.move.castle && action.move.rookFrom && action.move.rookTo) {
+          const rook = board[action.move.rookFrom[0]][action.move.rookFrom[1]];
+          if (rook) movers.push({
+            action, piece: rook, color: action.color, main: false,
+            pos: [...action.move.rookFrom],
+            path: buildFourPath({ fr: action.move.rookFrom[0], fc: action.move.rookFrom[1],
+              tr: action.move.rookTo[0], tc: action.move.rookTo[1] }, rook),
+            idx: 0, alive: true, done: false, targetsPiece: false
+          });
+        }
+      }
+      const moverAt = square => movers.find(m => m.alive && m.pos[0] === square[0] && m.pos[1] === square[1]);
+      const removeMover = mover => {
+        mover.alive = false;
+        mover.done = true;
+        if (board[mover.pos[0]][mover.pos[1]] === mover.piece) board[mover.pos[0]][mover.pos[1]] = null;
+      };
+      const removeAction = action => movers.filter(m => m.action === action).forEach(removeMover);
+      const place = (mover, square) => {
+        board[square[0]][square[1]] = mover.piece;
+        mover.pos = square;
+        mover.idx++;
+        if (mover.idx >= mover.path.length) mover.done = true;
+      };
+      const isFinal = mover => mover.idx === mover.path.length - 1;
+
+      for (let tick = 0; tick < FOUR_SIZE * 2; tick++) {
+        const active = movers.filter(m => m.alive && !m.done);
+        if (!active.length) break;
+        const previous = new Map(active.map(m => [m, m.pos]));
+        const next = new Map(active.map(m => [m, m.path[m.idx]]));
+        const placed = new Set();
+        for (const mover of active) {
+          if (board[mover.pos[0]][mover.pos[1]] === mover.piece) board[mover.pos[0]][mover.pos[1]] = null;
+        }
+
+        const destinations = new Map();
+        for (const mover of active) {
+          const square = next.get(mover);
+          const key = `${square[0]},${square[1]}`;
+          if (!destinations.has(key)) destinations.set(key, []);
+          destinations.get(key).push(mover);
+        }
+        for (const group of destinations.values()) {
+          const participants = group.filter(m => m.alive);
+          if (participants.length < 2) continue;
+          const actionsInvolved = new Set(participants.map(m => m.action));
+          if (actionsInvolved.size < 2) continue;
+          if (participants.length === 2 && isFinal(participants[0]) !== isFinal(participants[1])) {
+            const passer = isFinal(participants[0]) ? participants[1] : participants[0];
+            const blocker = passer === participants[0] ? participants[1] : participants[0];
+            const square = next.get(passer);
+            removeAction(blocker.action);
+            captures.push({ by: passer.color, piece: blocker.piece, zombie: passer.action.zombie,
+              score: fourEnemy(passer.color, blocker.color) });
+            events.push(`${FOUR_SIDE[blocker.color]}'s ${NAMES[blocker.piece.t]} was intercepted on ${fourSquareName(square)}.`);
+            place(passer, square);
+            passer.done = true;
+            placed.add(passer);
+          } else {
+            participants.forEach(m => removeAction(m.action));
+            events.push(`Pieces collided on ${fourSquareName(next.get(participants[0]))}; the involved movers were removed.`);
+          }
+        }
+
+        for (let i = 0; i < active.length; i++) {
+          for (let j = i + 1; j < active.length; j++) {
+            const a = active[i], b = active[j];
+            if (!a.alive || !b.alive || a.action === b.action) continue;
+            const an = next.get(a), bn = next.get(b);
+            if (an[0] === previous.get(b)[0] && an[1] === previous.get(b)[1] &&
+              bn[0] === previous.get(a)[0] && bn[1] === previous.get(a)[1]) {
+              removeAction(a.action);
+              removeAction(b.action);
+              events.push('Pieces collided head-on; the involved movers were removed.');
+            }
+          }
+        }
+
+        for (const mover of active) {
+          if (!mover.alive || placed.has(mover)) continue;
+          const square = next.get(mover);
+          const target = board[square[0]][square[1]];
+          if (target && fourEnemy(mover.color, target.c)) {
+            const victimMover = moverAt(square);
+            if (victimMover && victimMover.action !== mover.action) removeAction(victimMover.action);
+            else board[square[0]][square[1]] = null;
+            captures.push({ by: mover.color, piece: target, zombie: mover.action.zombie, score: true });
+            events.push(`${FOUR_SIDE[mover.color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} on ${fourSquareName(square)}.`);
+            place(mover, square);
+            if (!isFinal(mover)) mover.done = true;
+          } else if (target) {
+            const teammateMover = moverAt(square);
+            if (teammateMover && teammateMover.action !== mover.action) {
+              removeAction(teammateMover.action);
+              removeAction(mover.action);
+              events.push(`${FOUR_SIDE[mover.color]}'s ${NAMES[mover.piece.t]} collided with a teammate on ${fourSquareName(square)}.`);
+            } else {
+              removeAction(mover.action);
+              events.push(`${FOUR_SIDE[mover.color]}'s ${NAMES[mover.piece.t]} was blocked on ${fourSquareName(square)}.`);
+            }
+          } else {
+            if (!target && isFinal(mover) && mover.targetsPiece) {
+              events.push(`${FOUR_SIDE[mover.color]}'s move missed: its target left ${fourSquareName(square)}.`);
+            }
+            place(mover, square);
+          }
+
+          if (mover.done && mover.main && mover.alive && mover.action.move.enPassant) {
+            const [vr, vc] = mover.action.move.enPassant;
+            const victim = board[vr][vc];
+            if (victim && victim.t === 'p' && fourEnemy(mover.color, victim.c)) {
+              const victimMover = moverAt([vr, vc]);
+              if (victimMover) removeAction(victimMover.action);
+              else board[vr][vc] = null;
+              captures.push({ by: mover.color, piece: victim, zombie: mover.action.zombie, score: true });
+              events.push(`${FOUR_SIDE[mover.color]} captured ${FOUR_SIDE[victim.c]}'s Pawn en passant.`);
+            }
+          }
+          if (mover.done && mover.main && mover.alive && mover.piece.t === 'p' &&
+            mover.action.move.promo && fourAtPromotion(mover.color, mover.pos[0], mover.pos[1])) {
+            mover.piece = { ...mover.piece, t: mover.action.move.promo, promoted: true };
+            board[mover.pos[0]][mover.pos[1]] = mover.piece;
+            events.push(`${FOUR_SIDE[mover.color]}'s Pawn promoted to a ${NAMES[mover.piece.t]}.`);
+          }
+        }
+        frames.push(cloneBoard(board));
+      }
+
+      const enPassant = [];
+      for (const action of actions) {
+        const mover = action.main;
+        if (mover && mover.alive && mover.done && mover.pos[0] === action.move.tr &&
+          mover.pos[1] === action.move.tc && action.move.double) {
+          enPassant.push({ by: action.color, victim: [action.move.tr, action.move.tc] });
+        }
+      }
+      return { before, board, frames, events, captures, enPassant, actions };
+    }
+
     function resolveFourRound() {
-      const before = game.board;
-      const actions = fourSyncPlayers().map(color => ({
-        color,
-        move: { ...game.roundMoves[color] },
-        zombie: false
-      }));
+      const actions = fourSyncPlayers().map(color => ({ color, move: { ...game.roundMoves[color] }, zombie: false }));
       for (const color of FOUR_ORDER) {
         if (game.states[color] !== 'zombie') continue;
         const options = fourZombieMoves(color);
-        if (options.length) actions.push({
-          color,
-          move: options[Math.floor(Math.random() * options.length)],
-          zombie: true
-        });
+        if (options.length) actions.push({ color, move: options[Math.floor(Math.random() * options.length)], zombie: true });
       }
+      const result = simulateFourRound(actions);
+      phase = 'resolving';
+      selected = null;
+      game.lastMoves = actions.map(action => ({ ...action.move }));
+      setLog(['Moves in Progress...']);
+      updateStatus();
+      render();
+      startClockForTurn();
+      const token = ++animationToken;
+      let index = 0;
+      const step = () => {
+        if (token !== animationToken) return;
+        if (index < result.frames.length) {
+          game.board = result.frames[index++];
+          render();
+          setTimeout(step, TICK_MS);
+        } else {
+          finishFourRound(result);
+        }
+      };
+      setTimeout(step, TICK_MS);
+    }
 
-      const collisions = new Set();
-      const destinations = new Map();
-      for (const action of actions) {
-        const key = `${action.move.tr},${action.move.tc}`;
-        if (!destinations.has(key)) destinations.set(key, []);
-        destinations.get(key).push(action);
-      }
-      for (const group of destinations.values()) {
-        if (group.length > 1) group.forEach(action => collisions.add(action));
-      }
-      for (let i = 0; i < actions.length; i++) {
-        for (let j = i + 1; j < actions.length; j++) {
-          const a = actions[i].move, b = actions[j].move;
-          if (a.tr === b.fr && a.tc === b.fc && b.tr === a.fr && b.tc === a.fc) {
-            collisions.add(actions[i]);
-            collisions.add(actions[j]);
-          }
-        }
-      }
-
-      const successful = actions.filter(action => !collisions.has(action));
-      const departing = new Set(successful.map(action => before[action.move.fr][action.move.fc]?.id));
-      for (const action of successful) {
-        if (action.move.castle && action.move.rookFrom) {
-          const rook = before[action.move.rookFrom[0]][action.move.rookFrom[1]];
-          if (rook) departing.add(rook.id);
-        }
-      }
-      const board = cloneBoard(before);
-      for (const action of actions) {
-        board[action.move.fr][action.move.fc] = null;
-        if (action.move.castle && action.move.rookFrom && collisions.has(action)) {
-          const [rr, rc] = action.move.rookFrom;
-          const rook = board[rr][rc];
-          if (rook && rook.c === action.color) board[rr][rc] = null;
-        }
-      }
-
-      const lines = [];
-      const newEnPassant = [];
-      let resetIdle = false;
-      for (const action of actions) {
-        const { color, move, zombie } = action;
-        const piece = before[move.fr][move.fc];
-        if (!piece) continue;
-        lines.push(fourMoveLabel(before, move));
-        if (collisions.has(action)) {
-          lines.push(`${FOUR_SIDE[color]}'s ${NAMES[piece.t]} collided with another move and was removed.`);
-          resetIdle = true;
-          continue;
-        }
-        const captureAt = move.enPassant || [move.tr, move.tc];
-        const target = before[captureAt[0]][captureAt[1]];
-        if (target && target.c !== color && !departing.has(target.id)) {
-          board[captureAt[0]][captureAt[1]] = null;
-          if (!zombie && game.states[target.c] === 'active') {
-            const points = fourPieceValue(target);
-            game.scores[color] += points;
-            lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]}${move.enPassant ? ' en passant' : ''} (+${points}).`);
-          } else if (!zombie) {
-            lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s frozen ${NAMES[target.t]} for no points.`);
-          }
-          resetIdle = true;
-        }
-        let placed = piece;
-        if (piece.t === 'p' && move.promo && fourAtPromotion(color, move.tr, move.tc)) {
-          placed = { ...piece, t: move.promo, promoted: true };
-          lines.push(`${FOUR_SIDE[color]}'s Pawn promoted to a ${NAMES[move.promo]}.`);
-        }
-        board[move.tr][move.tc] = placed;
-        if (move.castle && move.rookFrom && move.rookTo) {
-          board[move.rookTo[0]][move.rookTo[1]] = before[move.rookFrom[0]][move.rookFrom[1]];
-          board[move.rookFrom[0]][move.rookFrom[1]] = null;
-          lines.push(`${FOUR_SIDE[color]} castled ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
-        }
-        if (piece.t === 'p') resetIdle = true;
-        if (!zombie && piece.t === 'p' && move.double) {
-          newEnPassant.push({ by: color, victim: [move.tr, move.tc] });
-        }
-      }
-
+    function finishFourRound(result) {
+      const { before, board, events, captures, enPassant, actions } = result;
       game.board = board;
-      game.enPassant = newEnPassant;
+      game.enPassant = enPassant;
+      const lines = actions.map(action => fourMoveLabel(before, action.move));
+      lines.push(...events);
+      for (const capture of captures) {
+        if (capture.score !== false && !capture.zombie && game.states[capture.piece.c] === 'active') {
+          const points = fourPieceValue(capture.piece);
+          game.scores[capture.by] += points;
+          lines.push(`${FOUR_SIDE[capture.by]} scores ${points} points for the capture.`);
+        }
+      }
+      const successful = actions.filter(action => action.main && action.main.alive && action.main.done &&
+        action.main.pos[0] === action.move.tr && action.main.pos[1] === action.move.tc);
+      const resetIdle = captures.length > 0 || actions.some(action => action.main && action.main.piece.t === 'p') ||
+        events.some(line => line.includes('collided'));
       game.idle = resetIdle ? 0 : game.idle + Math.max(1, successful.length);
       game.lastMoves = successful.map(action => ({ ...action.move }));
       game.lastMover = successful.length ? successful[successful.length - 1].color : null;
@@ -1951,41 +2071,31 @@
       }
       if (!lines.length) lines.push('All selected moves resolved.');
       game.roundMoves = {};
-
+      phase = 'select';
       const outcomes = FOUR_ORDER.filter(color => game.states[color] === 'active')
         .map(color => ({ color, checked: fourInCheck(board, color), hasMove: fourHasLegalMove(color) }))
         .filter(outcome => !outcome.hasMove);
       for (const outcome of outcomes) {
         const { color, checked } = outcome;
         if (isFourTeam()) {
-          if (checked) {
-            const winner = fourTeam(color) === 'white' ? 'black' : 'white';
-            fourFinishTeams(winner, [`${FOUR_SIDE[color]} is checkmated.`], 'Checkmate');
-          } else {
-            fourFinish('4P Teams - Draw (Stalemate)', [`${FOUR_SIDE[color]} is stalemated.`], 'Stalemate');
-          }
+          if (checked) fourFinishTeams(fourTeam(color) === 'white' ? 'black' : 'white', [`${FOUR_SIDE[color]} is checkmated.`], 'Checkmate');
+          else fourFinish('4P Teams - Draw (Stalemate)', [`${FOUR_SIDE[color]} is stalemated.`], 'Stalemate');
           return;
         }
         if (checked) {
-          const scorer = game.lastMover && game.lastMover !== color && game.states[game.lastMover] === 'active'
-            ? game.lastMover
-            : null;
+          const scorer = game.lastMover && game.lastMover !== color && game.states[game.lastMover] === 'active' ? game.lastMover : null;
           game.states[color] = 'frozen';
           if (scorer) {
             game.scores[scorer] += 20;
             lines.push(`${FOUR_SIDE[color]} is checkmated. ${FOUR_SIDE[scorer]} scores 20 points.`);
-          } else {
-            lines.push(`${FOUR_SIDE[color]} is checkmated and eliminated.`);
-          }
+          } else lines.push(`${FOUR_SIDE[color]} is checkmated and eliminated.`);
         } else {
           game.states[color] = 'frozen';
           game.scores[color] += 20;
           lines.push(`${FOUR_SIDE[color]} is stalemated: +20 points.`);
-          for (const other of FOUR_ORDER) {
-            if (other !== color && game.states[other] === 'active') {
-              game.scores[other] += 10;
-              lines.push(`${FOUR_SIDE[other]} receives 10 points.`);
-            }
+          for (const other of FOUR_ORDER) if (other !== color && game.states[other] === 'active') {
+            game.scores[other] += 10;
+            lines.push(`${FOUR_SIDE[other]} receives 10 points.`);
           }
         }
       }
@@ -3074,6 +3184,8 @@
           }
         } else if (phase === 'over') {
           setStatus(game.result);
+        } else if (phase === 'resolving') {
+          setStatus('Moves in Progress...');
         }
         return;
       }
