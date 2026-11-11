@@ -629,6 +629,21 @@
       border-color: var(--accent);
     }
 
+    #sync-mode-option {
+      display: block;
+      margin: 0 0 0.9rem;
+      color: var(--text-main);
+    }
+
+    #sync-mode-option[hidden] {
+      display: none;
+    }
+
+    #sync-mode-option input {
+      margin-right: 0.4rem;
+      accent-color: var(--accent);
+    }
+
     .time-fields {
       display: flex;
       flex-direction: column;
@@ -993,13 +1008,15 @@
   <div class="modal-overlay" id="time-modal" hidden>
     <div class="time-modal" role="dialog" aria-modal="true" aria-labelledby="time-title">
       <h2 id="time-title">Time Control</h2>
-      <p id="time-help">Set minutes and increment for each player. Increment is added after every completed move.</p>
+      <p id="time-help">Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.</p>
       <div class="time-presets" id="time-presets" role="group" aria-label="Time presets">
+        <button type="button" data-minutes="0" data-increment="0">∞</button>
         <button type="button" data-minutes="1" data-increment="0">1 + 0</button>
         <button type="button" data-minutes="3" data-increment="2">3 + 2</button>
         <button type="button" data-minutes="5" data-increment="3">5 + 3</button>
         <button type="button" data-minutes="10" data-increment="0">10 + 0</button>
       </div>
+      <label id="sync-mode-option" hidden><input id="sync-mode" type="checkbox"> Play in Sync mode (both players choose before moves resolve)</label>
       <div class="time-fields" id="time-fields"></div>
       <div class="time-actions">
         <button class="btn secondary" id="time-cancel" type="button">Cancel</button>
@@ -1092,12 +1109,15 @@
     const timeHelpEl = document.getElementById('time-help');
     const timeFieldsEl = document.getElementById('time-fields');
     const timePresetsEl = document.getElementById('time-presets');
+    const syncModeOptionEl = document.getElementById('sync-mode-option');
+    const syncModeInputEl = document.getElementById('sync-mode');
     const timeCancelEl = document.getElementById('time-cancel');
     const timeStartEl = document.getElementById('time-start');
 
     let nextId = 1;
     let game = null;
     let gameKind = 'sync';
+    let simultaneousMode = false;
     let phase = null;
     let selected = null;
     let pending = { w: null, b: null };
@@ -1125,7 +1145,7 @@
     const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1];
     const squareName = ([r, c]) => FILES[c] + (8 - r);
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
-    const isSync = () => gameKind === 'sync';
+    const isSimultaneous = () => gameKind === 'sync' || simultaneousMode;
     const isDark = () => gameKind === 'dark';
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
@@ -1134,7 +1154,7 @@
     const isFourTeam = () => gameKind === 'fourteam';
     const currentGame = () => GAMES.find(g => g.id === gameKind);
     const colorName = c => (isFour() ? FOUR_SIDE[c] : SIDE[c]) || FOUR_SIDE[c] || SIDE[c];
-    const activeColor = () => (localMode && !isSync() ? game.turn : myColor);
+    const activeColor = () => (localMode && !isSimultaneous() ? game.turn : myColor);
     const gameInProgress = () => !!game && phase !== 'over';
     const fourIndex = c => FOUR_ORDER.indexOf(c);
     const nextFourColor = c => FOUR_ORDER[(fourIndex(c) + 1) % FOUR_ORDER.length];
@@ -1178,7 +1198,7 @@
       reviewBarEl.hidden = true;
       reviewBtnEl.hidden = true;
       panelEl.hidden = false;
-      const intro = isSync()
+      const intro = isSimultaneous()
         ? (localMode
           ? 'White picks a move first, then passes the device to Black. Both moves happen at the same time.'
           : `You are ${SIDE[myColor]}. Pick a move; nothing happens until your opponent picks theirs.`)
@@ -2188,7 +2208,7 @@
         const minutes = Number(raw.minutes);
         const increment = Number(raw.increment);
         out[color] = {
-          minutes: Number.isFinite(minutes) ? Math.max(1, Math.min(180, Math.round(minutes))) : 5,
+          minutes: Number.isFinite(minutes) ? Math.max(0, Math.min(180, Math.round(minutes))) : 5,
           increment: Number.isFinite(increment) ? Math.max(0, Math.min(60, Math.round(increment))) : 0
         };
       }
@@ -2198,7 +2218,11 @@
     function createClock(controls, colors) {
       const normalized = normalizeControls(controls, colors);
       const remaining = {};
-      for (const color of colors) remaining[color] = normalized[color].minutes * 60000;
+      for (const color of colors) {
+        remaining[color] = normalized[color].minutes === 0
+          ? Infinity
+          : normalized[color].minutes * 60000;
+      }
       const clock = { controls: normalized, remaining, active: [], last: Date.now() };
       if (controls) lastTimeControl = normalized;
       return clock;
@@ -2235,7 +2259,7 @@
         setClockActive([]);
         return;
       }
-      if (isSync()) {
+      if (isSimultaneous()) {
         setClockActive(['w', 'b'].filter(color => !pending[color]));
       } else if (isFour()) {
         const state = game.states ? game.states[game.turn] : 'active';
@@ -2248,6 +2272,7 @@
     }
 
     function clockText(ms) {
+      if (!Number.isFinite(ms)) return '∞';
       const total = Math.max(0, Math.ceil(ms / 1000));
       const minutes = Math.floor(total / 60);
       const seconds = total % 60;
@@ -2260,9 +2285,14 @@
       const timeEl = el.querySelector('.clock-time');
       const labelEl = el.querySelector('.clock-label');
       if (timeEl) timeEl.textContent = clockText(game.clock.remaining[color]);
-      if (labelEl && control) labelEl.textContent = `${colorName(color)} · ${control.minutes}+${control.increment}`;
+      if (labelEl && control) {
+        labelEl.textContent = control.minutes === 0
+          ? `${colorName(color)} · ∞`
+          : `${colorName(color)} · ${control.minutes}+${control.increment}`;
+      }
       el.classList.toggle('active', game.clock.active.includes(color));
-      el.classList.toggle('low', game.clock.remaining[color] <= 10000);
+      el.classList.toggle('low',
+        Number.isFinite(game.clock.remaining[color]) && game.clock.remaining[color] <= 10000);
     }
 
     function updateClockDisplay() {
@@ -2566,6 +2596,7 @@
       const events = [];
       const capturers = new Set();
       const captured = [];
+      const captureCenters = [];
       const movers = [];
 
       for (const sel of selections) {
@@ -2604,9 +2635,10 @@
         if (board[m.pos[0]][m.pos[1]] === m.piece) board[m.pos[0]][m.pos[1]] = null;
         captured.push(m.piece);
       };
-      const capture = (attacker, victim) => {
+      const capture = (attacker, victim, center) => {
         capturers.add(attacker.piece);
         captured.push(victim);
+        if (isAtomic()) captureCenters.push(center);
       };
       const place = (m, sq) => {
         board[sq[0]][sq[1]] = m.piece;
@@ -2655,7 +2687,7 @@
                 const blocker = isFinal(a) ? a : b;
                 events.push(`${label(blocker)} intercepted ${label(passer)} on ${squareName(an)}: the ${NAMES[blocker.piece.t]} is taken and the ${NAMES[passer.piece.t]} stops there.`);
                 removeMover(blocker);
-                capture(passer, blocker.piece);
+                capture(passer, blocker.piece, an);
                 captured.pop();
                 place(passer, an);
                 passer.done = true;
@@ -2690,7 +2722,7 @@
               victim.alive = false;
               victim.done = true;
             }
-            capture(m, target);
+            capture(m, target, sq);
             if (isFinal(m)) {
               events.push(`${label(m)} captured ${pieceLabel(target)} on ${squareName(sq)}.`);
               place(m, sq);
@@ -2716,7 +2748,7 @@
                 vm.alive = false;
                 vm.done = true;
               }
-              capture(m, v);
+              capture(m, v, [vr, vc]);
               events.push(`${label(m)} captured ${pieceLabel(v)} en passant.`);
             } else {
               events.push(`${label(m)} missed: the en passant target already moved.`);
@@ -2737,6 +2769,23 @@
           enPassant.push({ color: m.color, square: [(m.sel.fr + m.sel.tr) / 2, m.sel.fc], victim: [m.sel.tr, m.sel.tc] });
         }
       }
+
+      for (const [cr, cc] of captureCenters) {
+        const destroyed = [];
+        for (let r = Math.max(0, cr - 1); r <= Math.min(7, cr + 1); r++) {
+          for (let c = Math.max(0, cc - 1); c <= Math.min(7, cc + 1); c++) {
+            const piece = board[r][c];
+            if (!piece) continue;
+            board[r][c] = null;
+            destroyed.push(piece);
+          }
+        }
+        for (const piece of destroyed) {
+          if (!captured.some(existing => existing.id === piece.id)) captured.push(piece);
+        }
+        if (destroyed.length) events.push(`Atomic explosion on ${squareName([cr, cc])}.`);
+      }
+      if (captureCenters.length) frames.push(cloneBoard(board));
 
       return { board, frames, events, capturers, captured, enPassant };
     }
@@ -2763,7 +2812,7 @@
         }
         return;
       }
-      if (!isSync()) {
+      if (!isSimultaneous()) {
         if (phase === 'select') {
           const check = !isDark() && inCheck(game.board, game.turn) ? ' (Check)' : '';
           const tally = isThreeCheck() ? ` · Checks W${game.checks.w} B${game.checks.b}` : '';
@@ -2798,7 +2847,7 @@
       }
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
       if (isDark() && localMode && darkView !== game.turn) return;
-      if (isSync()) {
+      if (isSimultaneous()) {
         if (pending[myColor]) return;
       } else if (!localMode && game.turn !== myColor) {
         return;
@@ -2846,7 +2895,7 @@
 
     function lockIn(move, promo) {
       const chosen = { ...move, promo };
-      if (!isSync()) {
+      if (!isSimultaneous()) {
         applyStandardMove(chosen);
         send({ type: 'move', move: chosen });
         return;
@@ -2855,6 +2904,7 @@
       if (localMode) {
         if (myColor === 'w') {
           myColor = 'b';
+          darkView = 'b';
           logEl.textContent = 'White has locked in a move. Pass the device to Black.';
           updateStatus();
           render();
@@ -2876,7 +2926,7 @@
     }
 
     function receiveMove(move) {
-      if (!isSync()) {
+      if (!isSimultaneous()) {
         applyStandardMove(move, true);
         return;
       }
@@ -2899,7 +2949,7 @@
 
     function pushHistory(lines, label) {
       if (!game) return;
-      const reviewLines = isSync() ? [label, ...lines] : [label, ...lines.slice(1)];
+      const reviewLines = isSimultaneous() ? [label, ...lines] : [label, ...lines.slice(1)];
       game.history.push({
         board: cloneBoard(game.board),
         captured: {
@@ -3102,15 +3152,30 @@
       game.enPassant = result.enPassant;
 
       const lines = [notation, ...result.events];
+      for (const color of ['w', 'b']) {
+        const king = findKing(board, color);
+        if (isKingHill() && king && king[0] >= 3 && king[0] <= 4 && king[1] >= 3 && king[1] <= 4) {
+          game.result = `King of the Hill - ${SIDE[color]} Wins`;
+        }
+        if (isThreeCheck() && king && inCheck(board, color)) {
+          const scorer = opponent(color);
+          game.checks[scorer]++;
+          lines.push(`${SIDE[scorer]} has given check ${game.checks[scorer]} of 3.`);
+          if (game.checks[scorer] >= 3) game.result = `Three Checks - ${SIDE[scorer]} Wins`;
+        }
+      }
       const delayedPieces = [...result.capturers].filter(p => board.some(row => row.includes(p)));
       if (delayedPieces.length) {
         lines.push(delayedPieces.map(p => `${SIDE[p.c]}'s ${NAMES[p.t]}`).join(' and ') + ' will be Delayed next turn.');
       }
 
       const outcome = positionResult(board);
-      if (outcome) game.result = outcome;
+      if (!game.result && outcome) game.result = outcome;
       phase = game.result ? 'over' : 'select';
-      if (localMode) myColor = 'w';
+      if (localMode) {
+        myColor = 'w';
+        darkView = 'w';
+      }
       syncClock();
       addIncrement('w');
       addIncrement('b');
@@ -3310,6 +3375,7 @@
           opponentLeft(c);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
+          simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
           newGame(msg.controls || null);
         } else if (msg.type === 'move' && game) {
           receiveMove(msg.move);
@@ -3350,7 +3416,7 @@
         }
         attachConnection(c);
         c.on('open', () => {
-          c.send({ type: 'start', kind: gameKind, controls });
+          c.send({ type: 'start', kind: gameKind, controls, simultaneous: isSimultaneous() });
           newGame(controls);
         });
       });
@@ -3416,11 +3482,14 @@
         minutes.className = 'time-min';
         minutes.id = `time-min-${color}`;
         minutes.type = 'number';
-        minutes.min = '1';
+        minutes.min = '0';
         minutes.max = '180';
         minutes.step = '1';
-        minutes.value = String((defaults[color] && defaults[color].minutes) || 5);
-        minutes.title = `${colorName(color)} minutes`;
+        const defaultMinutes = defaults[color] && Number.isFinite(defaults[color].minutes)
+          ? defaults[color].minutes
+          : 5;
+        minutes.value = String(defaultMinutes);
+        minutes.title = `${colorName(color)} minutes (0 = unlimited)`;
         const increment = document.createElement('input');
         increment.className = 'time-inc';
         increment.type = 'number';
@@ -3433,9 +3502,11 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
+      syncModeOptionEl.hidden = gameKind === 'sync' || isFour();
+      syncModeInputEl.checked = simultaneousMode;
       timeHelpEl.textContent = isFour()
-        ? 'Set minutes and increment independently for each player. Increment is added after every completed move.'
-        : 'Set minutes and increment for each player. Increment is added after every completed move.';
+        ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
+        : 'Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.';
       timeModalEl.hidden = false;
       const first = timeFieldsEl.querySelector('input');
       if (first) first.focus();
@@ -3605,6 +3676,7 @@
     timeStartEl.addEventListener('click', () => {
       const action = pendingAction;
       const controls = collectTimeControls();
+      simultaneousMode = gameKind === 'sync' || (!isFour() && syncModeInputEl.checked);
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
