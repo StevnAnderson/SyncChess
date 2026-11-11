@@ -2846,7 +2846,8 @@
         return;
       }
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
-      if (isDark() && localMode && darkView !== game.turn) return;
+      const darkPlayer = isSimultaneous() ? myColor : game.turn;
+      if (isDark() && localMode && darkView !== darkPlayer) return;
       if (isSimultaneous()) {
         if (pending[myColor]) return;
       } else if (!localMode && game.turn !== myColor) {
