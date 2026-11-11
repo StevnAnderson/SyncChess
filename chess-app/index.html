@@ -405,6 +405,290 @@
       text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
     }
 
+    .piece.r {
+      color: #ff6b6b;
+      text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
+    }
+
+    .piece.y {
+      color: #ffd93d;
+      text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
+    }
+
+    .piece.g {
+      color: #4ade80;
+      text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
+    }
+
+    .board.four {
+      grid-template-columns: repeat(14, 1fr);
+      grid-template-rows: repeat(14, 1fr);
+      width: min(100%, 720px);
+    }
+
+    .board.four .square {
+      font-size: clamp(0.7rem, 3.1vw, 1.8rem);
+    }
+
+    .board.four .piece.b {
+      color: #5aa9ff;
+      text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
+    }
+
+    .square.void {
+      background: transparent;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    .square.frozen .piece {
+      filter: grayscale(1);
+      opacity: 0.5;
+    }
+
+    .square.zombie .piece {
+      opacity: 0.75;
+    }
+
+    .clock-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      width: min(100%, 480px);
+    }
+
+    .clock {
+      flex: 1;
+      padding: 0.45rem 0.65rem;
+      border: 2px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background-color: rgba(0, 0, 0, 0.2);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .clock.active {
+      border-color: var(--accent);
+      color: var(--text-main);
+    }
+
+    .clock.low {
+      border-color: #e06c75;
+      color: #ff9aa2;
+    }
+
+    .clock-time {
+      display: block;
+      font-size: 1.35rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .clock-label {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .clock-bar[hidden] {
+      display: none;
+    }
+
+    .four-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      width: min(100%, 720px);
+    }
+
+    .four-panel[hidden] {
+      display: none;
+    }
+
+    .four-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.65rem;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background-color: rgba(0, 0, 0, 0.18);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .four-row.active {
+      border-color: var(--accent);
+      color: var(--text-main);
+    }
+
+    .four-row.eliminated {
+      opacity: 0.55;
+    }
+
+    .four-row .four-time {
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .four-row .four-score {
+      min-width: 2.4rem;
+      text-align: right;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .four-state {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .four-dot {
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 0.45rem;
+    }
+
+    .four-dot.r { background-color: #ff6b6b; }
+    .four-dot.b { background-color: #5aa9ff; }
+    .four-dot.y { background-color: #ffd93d; }
+    .four-dot.g { background-color: #4ade80; }
+
+    .extra-controls {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .extra-controls[hidden] {
+      display: none;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background-color: rgba(8, 8, 14, 0.78);
+    }
+
+    .modal-overlay[hidden] {
+      display: none;
+    }
+
+    .time-modal {
+      width: min(100%, 30rem);
+      background-color: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+    }
+
+    .time-modal h2 {
+      margin-bottom: 0.75rem;
+    }
+
+    .time-modal p {
+      margin: 0 0 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .time-presets {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.9rem;
+    }
+
+    .time-presets button {
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 6px;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+    }
+
+    .time-presets button:hover {
+      border-color: var(--accent);
+    }
+
+    .time-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .time-row {
+      display: grid;
+      grid-template-columns: 1fr 4.5rem 4.5rem;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .time-row label {
+      font-weight: 600;
+    }
+
+    .time-row input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.45rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--text-muted);
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-row .time-unit {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      grid-column: span 1;
+    }
+
+    .time-head {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: -0.2rem;
+    }
+
+    .time-head span:not(:first-child) {
+      text-align: center;
+    }
+
+    .time-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    .time-actions .btn.secondary {
+      background-color: transparent;
+      border: 1px solid var(--text-muted);
+      color: var(--text-main);
+    }
+
     .coord {
       position: absolute;
       font-size: 0.65rem;
@@ -579,10 +863,25 @@
       </div>
     </div>
     <div class="board-panel" id="board-panel" hidden>
+      <div class="four-panel" id="four-panel" hidden></div>
+      <div class="clock-bar" id="clock-bar" hidden>
+        <div class="clock" id="clock-w">
+          <span class="clock-label">White</span>
+          <span class="clock-time">--:--</span>
+        </div>
+        <div class="clock" id="clock-b">
+          <span class="clock-label">Black</span>
+          <span class="clock-time">--:--</span>
+        </div>
+      </div>
       <div class="captured" id="captured-by-black"></div>
       <div class="board" id="board"></div>
       <div class="captured" id="captured-by-white"></div>
       <div class="turn-log" id="turn-log"></div>
+      <div class="extra-controls" id="extra-controls" hidden>
+        <button class="btn" id="resign-btn" type="button">Resign</button>
+        <button class="btn" id="claim-btn" type="button" hidden>Claim Victory</button>
+      </div>
       <button class="btn" id="review-btn" type="button" hidden>Review Game</button>
       <div class="review-bar" id="review-bar" role="group" aria-label="Game review controls" hidden>
         <button class="btn" id="review-first" type="button" aria-label="First position" title="First position">&laquo;</button>
@@ -664,6 +963,49 @@
         <li>The first player to give three checks wins the game immediately.</li>
       </ul>
     </div>
+
+    <div class="rules-panel" id="rules-four" hidden>
+      <h2>How 4P Chess Works</h2>
+      <ul>
+        <li>Four players share a 14&times;14 board, one army in each corner. Play starts with Red and goes clockwise: Red, Blue, Yellow, Green.</li>
+        <li>There is no castling and no en passant. Pawns move one square forward, capture diagonally, and promote automatically to a queen on the 8th rank from their starting side.</li>
+        <li>Scoring: checkmate +20, self-stalemate +20, opponent stalemate +10 to each other player, and checks on two or more kings at once score bonus points.</li>
+        <li>Captures score 1 for a pawn or promoted pawn, 3 for a knight, 5 for a bishop or rook, and 9 for a queen. Capturing an eliminated player&rsquo;s pieces scores nothing.</li>
+        <li>When a player is checkmated or stalemated, their pieces stay on the board but are frozen and can be captured for no points.</li>
+        <li>If a player resigns or runs out of time, their king stays alive and moves at random on its turns. Checkmating a zombie king scores 20 points; stalemating it gives 10 points to each remaining player.</li>
+        <li>When three players are eliminated, the highest score wins &mdash; you can win even if you were eliminated first.</li>
+        <li>With two players left, a player leading by 21 or more points may claim victory by resigning and awarding the other player 20 points. The leader still wins the game.</li>
+      </ul>
+    </div>
+
+    <div class="rules-panel" id="rules-fourteam" hidden>
+      <h2>How 4P Teams Works</h2>
+      <ul>
+        <li>Teams are Red and Yellow against Blue and Green. Teammates sit across the board from each other and cannot capture each other&rsquo;s pieces.</li>
+        <li>Pawns promote on the 11th rank from their starting side, and underpromotion to a rook, bishop, or knight is allowed.</li>
+        <li>Checkmate one member of the opposing team to win. Stalemating a player draws the game.</li>
+        <li>Checkmate and stalemate are only judged when the affected player&rsquo;s turn is reached, so another player can mate first to escape.</li>
+        <li>There is no castling and no en passant in 4P Teams.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="time-modal" hidden>
+    <div class="time-modal" role="dialog" aria-modal="true" aria-labelledby="time-title">
+      <h2 id="time-title">Time Control</h2>
+      <p id="time-help">Set minutes and increment for each player. Increment is added after every completed move.</p>
+      <div class="time-presets" id="time-presets" role="group" aria-label="Time presets">
+        <button type="button" data-minutes="1" data-increment="0">1 + 0</button>
+        <button type="button" data-minutes="3" data-increment="2">3 + 2</button>
+        <button type="button" data-minutes="5" data-increment="3">5 + 3</button>
+        <button type="button" data-minutes="10" data-increment="0">10 + 0</button>
+      </div>
+      <div class="time-fields" id="time-fields"></div>
+      <div class="time-actions">
+        <button class="btn secondary" id="time-cancel" type="button">Cancel</button>
+        <button class="btn" id="time-start" type="button">Start Game</button>
+      </div>
+    </div>
   </div>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script>
@@ -673,12 +1015,19 @@
     };
     const NAMES = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' };
     const SIDE = { w: 'White', b: 'Black' };
+    const FOUR_SIDE = { r: 'Red', b: 'Blue', y: 'Yellow', g: 'Green' };
+    const FOUR_ORDER = ['r', 'b', 'y', 'g'];
+    const FOUR_SIZE = 14;
+    const FOUR_BACK_RIGHT = ['r', 'n', 'b', 'q', 'b', 'n', 'k', 'r'];
+    const FOUR_BACK_LEFT = ['r', 'k', 'n', 'b', 'q', 'b', 'n', 'r'];
     const FILES = 'abcdefgh';
     const BACK_RANK = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
     const TICK_MS = 450;
     const PEER_PREFIX = 'syncchess-';
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const GAMES = [
+      { id: 'four', name: '4P Chess' },
+      { id: 'fourteam', name: '4P Teams' },
       { id: 'atomic', name: 'Atomic' },
       { id: 'chess', name: 'Chess' },
       { id: 'dark', name: 'Dark Chess' },
@@ -686,6 +1035,10 @@
       { id: 'sync', name: 'Sync Chess' },
       { id: 'threecheck', name: 'Three-Check' }
     ];
+    GLYPHS.r = GLYPHS.w;
+    GLYPHS.y = GLYPHS.w;
+    GLYPHS.g = GLYPHS.w;
+    const FOUR_GLYPHS = { r: GLYPHS.w, b: GLYPHS.w, y: GLYPHS.w, g: GLYPHS.w };
 
     const boardEl = document.getElementById('board');
     const titleEl = document.getElementById('game-title');
@@ -695,6 +1048,8 @@
     const nextBtnEl = document.getElementById('game-next');
     const menuEl = document.getElementById('game-menu');
     const rulesEl = {
+      four: document.getElementById('rules-four'),
+      fourteam: document.getElementById('rules-fourteam'),
       atomic: document.getElementById('rules-atomic'),
       chess: document.getElementById('rules-chess'),
       dark: document.getElementById('rules-dark'),
@@ -720,6 +1075,22 @@
     const reviewPrevEl = document.getElementById('review-prev');
     const reviewNextEl = document.getElementById('review-next');
     const reviewLastEl = document.getElementById('review-last');
+    const clockBarEl = document.getElementById('clock-bar');
+    const clockEls = {
+      w: document.getElementById('clock-w'),
+      b: document.getElementById('clock-b')
+    };
+    const fourPanelEl = document.getElementById('four-panel');
+    const extraControlsEl = document.getElementById('extra-controls');
+    const resignBtnEl = document.getElementById('resign-btn');
+    const claimBtnEl = document.getElementById('claim-btn');
+    const timeModalEl = document.getElementById('time-modal');
+    const timeTitleEl = document.getElementById('time-title');
+    const timeHelpEl = document.getElementById('time-help');
+    const timeFieldsEl = document.getElementById('time-fields');
+    const timePresetsEl = document.getElementById('time-presets');
+    const timeCancelEl = document.getElementById('time-cancel');
+    const timeStartEl = document.getElementById('time-start');
 
     let nextId = 1;
     let game = null;
@@ -739,9 +1110,14 @@
     let darkView = 'w';
     let reviewing = false;
     let reviewIndex = 0;
+    let pendingAction = null;
+    let pendingControls = null;
+    let lastTimeControl = null;
+    let fourZombieToken = 0;
+    let timingOut = false;
 
     const makePiece = (t, c) => ({ t, c, id: nextId++, delayed: false });
-    const inBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+    const inBounds = (r, c, size = 8) => r >= 0 && r < size && c >= 0 && c < size;
     const opponent = color => (color === 'w' ? 'b' : 'w');
     const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1];
     const squareName = ([r, c]) => FILES[c] + (8 - r);
@@ -751,11 +1127,20 @@
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
+    const isFour = () => gameKind === 'four' || gameKind === 'fourteam';
+    const isFourTeam = () => gameKind === 'fourteam';
     const currentGame = () => GAMES.find(g => g.id === gameKind);
+    const colorName = c => (isFour() ? FOUR_SIDE[c] : SIDE[c]) || FOUR_SIDE[c] || SIDE[c];
     const activeColor = () => (localMode && !isSync() ? game.turn : myColor);
     const gameInProgress = () => !!game && phase !== 'over';
+    const fourIndex = c => FOUR_ORDER.indexOf(c);
+    const nextFourColor = c => FOUR_ORDER[(fourIndex(c) + 1) % FOUR_ORDER.length];
 
-    function newGame() {
+    function newGame(controls = null) {
+      if (isFour()) {
+        newFourGame(controls);
+        return;
+      }
       animationToken++;
       const board = Array.from({ length: 8 }, () => Array(8).fill(null));
       for (let c = 0; c < 8; c++) {
@@ -772,7 +1157,8 @@
         captured: { w: [], b: [] },
         checks: { w: 0, b: 0 },
         turn: 'w',
-        result: null
+        result: null,
+        clock: createClock(controls, ['w', 'b'])
       };
       phase = 'select';
       selected = null;
@@ -811,6 +1197,968 @@
       }];
       updateStatus();
       render();
+      startClockForTurn();
+    }
+
+    // ---------------------------------------------------------------------
+    // Four-player chess (14x14 board with the four 3x3 corners removed)
+    // ---------------------------------------------------------------------
+    const FOUR_FORWARD = { r: [-1, 0], y: [1, 0], b: [0, 1], g: [0, -1] };
+    const FOUR_PAWN_CAPTURES = {
+      r: [[-1, -1], [-1, 1]],
+      y: [[1, -1], [1, 1]],
+      b: [[-1, 1], [1, 1]],
+      g: [[-1, -1], [1, -1]]
+    };
+    const FOUR_KNIGHT_STEPS = [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]];
+    const FOUR_KING_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const FOUR_RAYS = [
+      { dirs: [[1, 0], [-1, 0], [0, 1], [0, -1]], types: 'rq' },
+      { dirs: [[1, 1], [1, -1], [-1, 1], [-1, -1]], types: 'bq' }
+    ];
+
+    function fourVoid(r, c) {
+      return (r < 3 || r > 10) && (c < 3 || c > 10);
+    }
+
+    function fourPlayable(r, c) {
+      return inBounds(r, c, FOUR_SIZE) && !fourVoid(r, c);
+    }
+
+    const fourTeam = color => (color === 'r' || color === 'y' ? 'white' : 'black');
+    const fourSameTeam = (a, b) => isFourTeam() && fourTeam(a) === fourTeam(b);
+    const fourEnemy = (a, b) => a !== b && !fourSameTeam(a, b);
+    const fourSquareName = ([r, c]) => String.fromCharCode(97 + c) + (FOUR_SIZE - r);
+
+    function fourPromoRank(color) {
+      if (isFourTeam()) return color === 'r' ? 3 : color === 'y' ? 10 : color === 'b' ? 10 : 3;
+      return color === 'r' ? 6 : color === 'y' ? 7 : color === 'b' ? 7 : 6;
+    }
+
+    function fourAtPromotion(color, r, c) {
+      const rank = fourPromoRank(color);
+      return color === 'r' || color === 'y' ? r === rank : c === rank;
+    }
+
+    function fourPieceValue(piece) {
+      if (piece.promoted) return 1;
+      if (piece.t === 'p') return 1;
+      if (piece.t === 'n') return 3;
+      if (piece.t === 'b' || piece.t === 'r') return 5;
+      if (piece.t === 'q') return 9;
+      return 0;
+    }
+
+    function newFourGame(controls = null) {
+      animationToken++;
+      fourZombieToken++;
+      const board = Array.from({ length: FOUR_SIZE }, () => Array(FOUR_SIZE).fill(null));
+      const place = (r, c, t, color) => { board[r][c] = makePiece(t, color); };
+
+      for (let i = 0; i < 8; i++) {
+        place(13, 3 + i, FOUR_BACK_RIGHT[i], 'r');
+        place(12, 3 + i, 'p', 'r');
+        place(0, 3 + i, FOUR_BACK_LEFT[i], 'y');
+        place(1, 3 + i, 'p', 'y');
+        place(3 + i, 0, FOUR_BACK_LEFT[i], 'b');
+        place(3 + i, 1, 'p', 'b');
+        place(3 + i, 13, FOUR_BACK_RIGHT[i], 'g');
+        place(3 + i, 12, 'p', 'g');
+      }
+
+      game = {
+        board,
+        turn: 'r',
+        states: { r: 'active', b: 'active', y: 'active', g: 'active' },
+        scores: { r: 0, b: 0, y: 0, g: 0 },
+        lastMoves: [],
+        lastMover: null,
+        idle: 0,
+        result: null,
+        clock: createClock(controls, FOUR_ORDER),
+        history: []
+      };
+      localMode = true;
+      phase = 'select';
+      selected = null;
+      pending = { w: null, b: null };
+      choosingPromotion = false;
+      promoEl.hidden = true;
+      clearTimeout(handoffTimer);
+      handoffTimer = null;
+      handoff = false;
+      handoffEl.hidden = true;
+      reviewing = false;
+      reviewIndex = 0;
+      reviewBarEl.hidden = true;
+      reviewBtnEl.hidden = true;
+      panelEl.hidden = false;
+
+      const intro = isFourTeam()
+        ? 'Teams: Red and Yellow (White Team) play Blue and Green (Black Team). Teammates sit opposite each other. Red moves first.'
+        : 'Red moves first, then Blue, Yellow, and Green clockwise. Checkmates and captures score points; highest score wins.';
+      logEl.textContent = intro;
+      game.history.push({
+        board: cloneBoard(board),
+        states: { ...game.states },
+        scores: { ...game.scores },
+        lastMoves: [],
+        lines: [intro],
+        reviewLines: [intro],
+        label: 'Starting Position'
+      });
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
+    function fourFindKing(board, color) {
+      for (let r = 0; r < FOUR_SIZE; r++) {
+        for (let c = 0; c < FOUR_SIZE; c++) {
+          const p = board[r][c];
+          if (p && p.t === 'k' && p.c === color) return [r, c];
+        }
+      }
+      return null;
+    }
+
+    function fourAttackerColors(defender, states = game.states) {
+      return FOUR_ORDER.filter(color => {
+        if (color === defender) return false;
+        if (fourSameTeam(color, defender)) return false;
+        const state = states ? states[color] : 'active';
+        return state === 'active' || state === 'zombie';
+      });
+    }
+
+    function fourSquareAttacked(board, r, c, defender, states = game.states) {
+      for (const color of fourAttackerColors(defender, states)) {
+        for (const [or, oc] of FOUR_PAWN_CAPTURES[color]) {
+          const sr = r - or, sc = c - oc;
+          if (!fourPlayable(sr, sc)) continue;
+          const p = board[sr][sc];
+          if (p && p.c === color && p.t === 'p') return true;
+        }
+        for (const [dr, dc] of FOUR_KNIGHT_STEPS) {
+          const sr = r + dr, sc = c + dc;
+          if (!fourPlayable(sr, sc)) continue;
+          const p = board[sr][sc];
+          if (p && p.c === color && p.t === 'n') return true;
+        }
+        for (const [dr, dc] of FOUR_KING_STEPS) {
+          const sr = r + dr, sc = c + dc;
+          if (!fourPlayable(sr, sc)) continue;
+          const p = board[sr][sc];
+          if (p && p.c === color && p.t === 'k') return true;
+        }
+        for (const { dirs, types } of FOUR_RAYS) {
+          for (const [dr, dc] of dirs) {
+            let rr = r + dr, cc = c + dc;
+            while (fourPlayable(rr, cc)) {
+              const p = board[rr][cc];
+              if (p) {
+                if (p.c === color && types.includes(p.t)) return true;
+                break;
+              }
+              rr += dr;
+              cc += dc;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    function fourInCheckBoard(board, color, states = game.states) {
+      const king = fourFindKing(board, color);
+      return !!king && fourSquareAttacked(board, king[0], king[1], color, states);
+    }
+
+    const fourInCheck = (board, color) => fourInCheckBoard(board, color, game.states);
+
+    function fourPseudoMoves(board, r, c) {
+      const piece = board[r][c];
+      if (!piece || game.states[piece.c] !== 'active') return [];
+      const moves = [];
+      const add = (tr, tc) => {
+        const move = { fr: r, fc: c, tr, tc };
+        if (piece.t === 'p' && fourAtPromotion(piece.c, tr, tc)) move.promotion = true;
+        moves.push(move);
+      };
+      const canLand = (tr, tc) => {
+        if (!fourPlayable(tr, tc)) return false;
+        const target = board[tr][tc];
+        if (!target) return true;
+        return fourEnemy(piece.c, target.c) && target.t !== 'k';
+      };
+
+      if (piece.t === 'p') {
+        const [dr, dc] = FOUR_FORWARD[piece.c];
+        const fr = r + dr, fc = c + dc;
+        if (fourPlayable(fr, fc) && !board[fr][fc]) add(fr, fc);
+        for (const [or, oc] of FOUR_PAWN_CAPTURES[piece.c]) {
+          const tr = r + or, tc = c + oc;
+          if (!fourPlayable(tr, tc)) continue;
+          const target = board[tr][tc];
+          if (target && fourEnemy(piece.c, target.c) && target.t !== 'k') add(tr, tc);
+        }
+      } else if (piece.t === 'n' || piece.t === 'k') {
+        const steps = piece.t === 'n' ? FOUR_KNIGHT_STEPS : FOUR_KING_STEPS;
+        for (const [dr, dc] of steps) {
+          const tr = r + dr, tc = c + dc;
+          if (canLand(tr, tc)) add(tr, tc);
+        }
+      } else {
+        for (const { dirs, types } of FOUR_RAYS) {
+          if (!types.includes(piece.t)) continue;
+          for (const [dr, dc] of dirs) {
+            let tr = r + dr, tc = c + dc;
+            while (fourPlayable(tr, tc)) {
+              const target = board[tr][tc];
+              if (target) {
+                if (fourEnemy(piece.c, target.c) && target.t !== 'k') add(tr, tc);
+                break;
+              }
+              add(tr, tc);
+              tr += dr;
+              tc += dc;
+            }
+          }
+        }
+      }
+      return moves;
+    }
+
+    function fourApplyRaw(board, move, promo) {
+      const next = board.map(row => row.slice());
+      const piece = next[move.fr][move.fc];
+      if (!piece) return next;
+      let placed = piece;
+      if (piece.t === 'p' && promo && fourAtPromotion(piece.c, move.tr, move.tc)) {
+        placed = { ...piece, t: promo, promoted: true };
+      }
+      next[move.tr][move.tc] = placed;
+      next[move.fr][move.fc] = null;
+      return next;
+    }
+
+    function fourLegalMoves(board, r, c) {
+      const piece = board[r][c];
+      if (!piece) return [];
+      return fourPseudoMoves(board, r, c).filter(move => {
+        const next = fourApplyRaw(board, move, 'q');
+        return !fourInCheck(next, piece.c);
+      });
+    }
+
+    function fourHasLegalMove(color) {
+      for (let r = 0; r < FOUR_SIZE; r++) {
+        for (let c = 0; c < FOUR_SIZE; c++) {
+          const p = game.board[r][c];
+          if (p && p.c === color && game.states[color] === 'active' && fourLegalMoves(game.board, r, c).length) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function fourPieceAttacks(piece, fr, fc, board, tr, tc) {
+      const dr = tr - fr, dc = tc - fc;
+      if (!dr && !dc) return false;
+      if (piece.t === 'p') {
+        return FOUR_PAWN_CAPTURES[piece.c].some(([or, oc]) => or === dr && oc === dc);
+      }
+      if (piece.t === 'n') return FOUR_KNIGHT_STEPS.some(([or, oc]) => or === dr && oc === dc);
+      if (piece.t === 'k') return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+      const straight = (dr === 0) !== (dc === 0);
+      const diagonal = Math.abs(dr) === Math.abs(dc);
+      if (piece.t === 'r' && !straight) return false;
+      if (piece.t === 'b' && !diagonal) return false;
+      if (piece.t === 'q' && !straight && !diagonal) return false;
+      const sr = Math.sign(dr), sc = Math.sign(dc);
+      let r = fr + sr, c = fc + sc;
+      while (fourPlayable(r, c)) {
+        if (r === tr && c === tc) return true;
+        if (board[r][c]) return false;
+        r += sr;
+        c += sc;
+      }
+      return false;
+    }
+
+    function fourKingsCheckedBy(color, r, c) {
+      const piece = game.board[r][c];
+      if (!piece) return [];
+      return fourAttackerColors(color).filter(other => other !== color).map(other => fourFindKing(game.board, other))
+        .filter(Boolean)
+        .filter(([kr, kc]) => fourPieceAttacks(piece, r, c, game.board, kr, kc));
+    }
+
+    function fourMoveLabel(before, move) {
+      const piece = before[move.fr][move.fc];
+      if (!piece) return 'Move';
+      const promo = move.promotion ? '=' + (move.promo || 'q').toUpperCase() : '';
+      return `${FOUR_SIDE[piece.c]} ${NAMES[piece.t]} ${fourSquareName([move.fr, move.fc])}-${fourSquareName([move.tr, move.tc])}${promo}`;
+    }
+
+    function pushFourHistory(lines, label) {
+      if (!game) return;
+      game.history.push({
+        board: cloneBoard(game.board),
+        states: { ...game.states },
+        scores: { ...game.scores },
+        lastMoves: game.lastMoves.map(m => ({ ...m })),
+        lines: [...lines],
+        reviewLines: [...lines],
+        label
+      });
+    }
+
+    function onFourSquareClick(r, c) {
+      if (!game || !localMode || reviewing || phase !== 'select' || choosingPromotion) return;
+      if (fourVoid(r, c) || game.states[game.turn] !== 'active') return;
+      const piece = game.board[r][c];
+      if (selected) {
+        const move = selected.moves.find(m => m.tr === r && m.tc === c);
+        if (move) {
+          selected = null;
+          if (move.promotion && isFourTeam()) {
+            render();
+            askFourPromotion(move);
+          } else {
+            applyFourMove(move, move.promotion ? 'q' : null);
+          }
+          return;
+        }
+      }
+      if (piece && piece.c === game.turn && game.states[piece.c] === 'active') {
+        selected = { r, c, moves: fourLegalMoves(game.board, r, c) };
+      } else {
+        selected = null;
+      }
+      render();
+    }
+
+    function askFourPromotion(move) {
+      choosingPromotion = true;
+      promoEl.querySelectorAll('button').forEach(btn => btn.remove());
+      for (const type of ['q', 'r', 'b', 'n']) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = FOUR_GLYPHS[game.turn][type];
+        btn.addEventListener('click', () => {
+          promoEl.hidden = true;
+          choosingPromotion = false;
+          applyFourMove(move, type);
+        });
+        promoEl.appendChild(btn);
+      }
+      promoEl.hidden = false;
+    }
+
+    function applyFourMove(move, promo, zombie = false) {
+      if (!game || phase === 'over') return;
+      const before = cloneBoard(game.board);
+      const moving = game.board[move.fr][move.fc];
+      if (!moving) return;
+      const color = moving.c;
+      const fromType = moving.t;
+      const target = game.board[move.tr][move.tc];
+      const lines = [fourMoveLabel(before, move)];
+      syncClock();
+
+      if (target) {
+        if (!zombie && game.states[target.c] === 'active') {
+          const points = fourPieceValue(target);
+          game.scores[color] += points;
+          lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} (+${points}).`);
+        } else if (!zombie) {
+          lines.push(`${FOUR_SIDE[color]} captured ${FOUR_SIDE[target.c]}'s frozen ${NAMES[target.t]} for no points.`);
+        } else {
+          lines.push(`${FOUR_SIDE[color]}'s zombie king captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]}.`);
+        }
+        game.idle = 0;
+      } else {
+        game.idle++;
+      }
+      if (fromType === 'p') game.idle = 0;
+
+      game.board = fourApplyRaw(game.board, move, promo);
+      const placed = game.board[move.tr][move.tc];
+      if (fromType === 'p' && move.promotion) {
+        lines.push(`${FOUR_SIDE[color]}'s Pawn promoted to a ${NAMES[placed.t]}.`);
+      }
+      game.lastMoves = [{ ...move, promo }];
+      game.lastMover = color;
+
+      if (!zombie) {
+        addIncrement(color);
+        const checkedKings = fourKingsCheckedBy(color, move.tr, move.tc);
+        if (checkedKings.length >= 2) {
+          const bonus = placed.t === 'q'
+            ? (checkedKings.length >= 3 ? 5 : 2)
+            : (checkedKings.length >= 3 ? 20 : 5);
+          game.scores[color] += bonus;
+          lines.push(`${FOUR_SIDE[color]} checks ${checkedKings.length} kings at once (+${bonus}).`);
+        }
+      }
+
+      pushFourHistory(lines, fourMoveLabel(before, move));
+      setLog(lines);
+      fourAdvanceTurn();
+    }
+
+    function fourActiveCount() {
+      return FOUR_ORDER.filter(color => game.states[color] === 'active').length;
+    }
+
+    function fourCanClaim() {
+      if (!game || isFourTeam() || phase !== 'select') return null;
+      const active = FOUR_ORDER.filter(color => game.states[color] === 'active');
+      if (active.length !== 2) return null;
+      const [a, b] = active;
+      if (game.scores[a] - game.scores[b] >= 21) return a;
+      if (game.scores[b] - game.scores[a] >= 21) return b;
+      return null;
+    }
+
+    function fourDrawDue() {
+      if (game.idle >= 100) return 'fifty';
+      const active = FOUR_ORDER.filter(color => game.states[color] === 'active');
+      const material = active.some(color => {
+        for (let r = 0; r < FOUR_SIZE; r++) {
+          for (let c = 0; c < FOUR_SIZE; c++) {
+            const p = game.board[r][c];
+            if (p && p.c === color && p.t !== 'k') return true;
+          }
+        }
+        return false;
+      });
+      return material ? null : 'material';
+    }
+
+    function fourAdvanceTurn() {
+      if (!game || phase === 'over') return;
+      const active = FOUR_ORDER.filter(color => game.states[color] === 'active');
+      if (isFourTeam()) {
+        const whiteActive = active.some(color => fourTeam(color) === 'white');
+        const blackActive = active.some(color => fourTeam(color) === 'black');
+        if (!whiteActive || !blackActive) {
+          if (!whiteActive && !blackActive) {
+            fourFinish('4P Teams - Draw', ['Neither team has an active player left.'], 'Draw');
+          } else {
+            fourFinishTeams(whiteActive ? 'white' : 'black', ['The other team has no active players left.'], 'Team Eliminated');
+          }
+          return;
+        }
+      } else if (active.length <= 1) {
+        fourFinishFfa();
+        return;
+      }
+      let next = nextFourColor(game.turn);
+      let guard = 0;
+      while (game.states[next] !== 'active' && game.states[next] !== 'zombie' && guard++ < 8) {
+        next = nextFourColor(next);
+      }
+      game.turn = next;
+      selected = null;
+      fourEvaluateTurn();
+    }
+
+    function fourEvaluateTurn() {
+      if (!game || phase === 'over') return;
+      const color = game.turn;
+      if (game.states[color] === 'frozen') {
+        fourAdvanceTurn();
+        return;
+      }
+      if (game.states[color] === 'zombie') {
+        setClockActive([]);
+        updateStatus();
+        render();
+        scheduleFourZombie();
+        return;
+      }
+      if (!fourHasLegalMove(color)) {
+        if (fourInCheck(game.board, color)) fourHandleCheckmate(color);
+        else fourHandleStalemate(color);
+        return;
+      }
+      const draw = fourDrawDue();
+      if (draw) {
+        fourHandleDraw(draw);
+        return;
+      }
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
+    function fourFinish(result, lines, label) {
+      game.result = result;
+      phase = 'over';
+      selected = null;
+      choosingPromotion = false;
+      promoEl.hidden = true;
+      fourZombieToken++;
+      setClockActive([]);
+      const allLines = [...(lines || []), result];
+      pushFourHistory(allLines, label || 'Game Over');
+      setLog(allLines);
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
+    function fourFinishFfa() {
+      if (!game || phase === 'over') return;
+      const max = Math.max(...FOUR_ORDER.map(color => game.scores[color]));
+      const leaders = FOUR_ORDER.filter(color => game.scores[color] === max);
+      const result = leaders.length === 1
+        ? `4P Chess - ${FOUR_SIDE[leaders[0]]} Wins with ${max} Points`
+        : `4P Chess - Draw (${max} Points Each)`;
+      fourFinish(result, [], 'Final Score');
+    }
+
+    function fourFinishTeams(winnerTeam, lines, label) {
+      const name = winnerTeam === 'white' ? 'White Team (Red & Yellow)' : 'Black Team (Blue & Green)';
+      fourFinish(`4P Teams - ${name} Wins`, lines, label || 'Checkmate');
+    }
+
+    function fourRemoveKing(color) {
+      const king = fourFindKing(game.board, color);
+      if (king) game.board[king[0]][king[1]] = null;
+    }
+
+    function fourMakeZombie(color, reason) {
+      if (!game || phase === 'over') return;
+      for (let r = 0; r < FOUR_SIZE; r++) {
+        for (let c = 0; c < FOUR_SIZE; c++) {
+          const p = game.board[r][c];
+          if (p && p.c === color && p.t !== 'k') game.board[r][c] = null;
+        }
+      }
+      game.states[color] = 'zombie';
+      game.lastMoves = [];
+      const lines = [reason, `${FOUR_SIDE[color]}'s king remains and will move at random.`];
+      pushFourHistory(lines, `${FOUR_SIDE[color]} Zombie`);
+      setLog(lines);
+      if (game.turn === color) {
+        fourAdvanceTurn();
+      } else {
+        updateStatus();
+        render();
+        startClockForTurn();
+      }
+    }
+
+    function fourHandleCheckmate(color) {
+      const by = game.lastMover && game.lastMover !== color ? game.lastMover : null;
+      if (isFourTeam()) {
+        const winner = by ? fourTeam(by) : (fourTeam(color) === 'white' ? 'black' : 'white');
+        fourFinishTeams(winner, [`${FOUR_SIDE[color]} is checkmated.`], 'Checkmate');
+        return;
+      }
+      const lines = [];
+      if (by && game.states[by] === 'active') {
+        game.scores[by] += 20;
+        lines.push(`${FOUR_SIDE[color]} is checkmated. ${FOUR_SIDE[by]} scores 20 points.`);
+      } else {
+        lines.push(`${FOUR_SIDE[color]} is checkmated and eliminated.`);
+      }
+      game.states[color] = 'frozen';
+      game.lastMoves = [];
+      pushFourHistory(lines, `${FOUR_SIDE[color]} Checkmated`);
+      setLog(lines);
+      fourAdvanceTurn();
+    }
+
+    function fourHandleStalemate(color) {
+      if (isFourTeam()) {
+        fourFinish('4P Teams - Draw (Stalemate)', [`${FOUR_SIDE[color]} is stalemated.`], 'Stalemate');
+        return;
+      }
+      const lines = [];
+      game.scores[color] += 20;
+      lines.push(`${FOUR_SIDE[color]} is stalemated: +20 points.`);
+      for (const other of FOUR_ORDER) {
+        if (other === color || game.states[other] !== 'active') continue;
+        game.scores[other] += 10;
+        lines.push(`${FOUR_SIDE[other]} receives 10 points.`);
+      }
+      game.states[color] = 'frozen';
+      game.lastMoves = [];
+      pushFourHistory(lines, `${FOUR_SIDE[color]} Stalemated`);
+      setLog(lines);
+      fourAdvanceTurn();
+    }
+
+    function fourHandleDraw(kind) {
+      if (isFourTeam()) {
+        fourFinish('4P Teams - Draw', [kind === 'fifty' ? 'Draw by the 50-move rule.' : 'Draw by insufficient material.'], 'Draw');
+        return;
+      }
+      const lines = [];
+      for (const color of FOUR_ORDER) {
+        if (game.states[color] !== 'active') continue;
+        game.scores[color] += 10;
+        lines.push(`${FOUR_SIDE[color]} receives 10 points for the draw.`);
+      }
+      lines.push(kind === 'fifty' ? 'Draw by the 50-move rule.' : 'Draw by insufficient material.');
+      pushFourHistory(lines, 'Draw');
+      setLog(lines);
+      fourFinishFfa();
+    }
+
+    function scheduleFourZombie() {
+      const token = ++fourZombieToken;
+      setTimeout(() => {
+        if (token !== fourZombieToken || !game || phase !== 'select' || !isFour()) return;
+        if (game.states[game.turn] !== 'zombie') return;
+        fourZombieTurn();
+      }, 500);
+    }
+
+    function fourZombieMoves(color) {
+      const king = fourFindKing(game.board, color);
+      if (!king) return [];
+      const moves = [];
+      for (const [dr, dc] of FOUR_KING_STEPS) {
+        const tr = king[0] + dr, tc = king[1] + dc;
+        if (!fourPlayable(tr, tc)) continue;
+        const target = game.board[tr][tc];
+        if (target && (target.c === color || fourSameTeam(color, target.c) || target.t === 'k')) continue;
+        moves.push({ fr: king[0], fc: king[1], tr, tc });
+      }
+      return moves;
+    }
+
+    function fourZombieTurn() {
+      const color = game.turn;
+      const checked = fourInCheck(game.board, color);
+      const moves = fourZombieMoves(color);
+      const safe = checked
+        ? moves.filter(move => !fourInCheck(fourApplyRaw(game.board, move, null), color))
+        : moves;
+      if (checked && !safe.length) {
+        fourZombieMate(color);
+        return;
+      }
+      if (!checked && !moves.length) {
+        fourZombieStale(color);
+        return;
+      }
+      const pool = checked ? safe : moves;
+      if (!pool.length) {
+        fourZombieStale(color);
+        return;
+      }
+      const move = pool[Math.floor(Math.random() * pool.length)];
+      applyFourMove(move, null, true);
+    }
+
+    function fourZombieMate(color) {
+      const by = game.lastMover;
+      const lines = [];
+      if (by && game.states[by] === 'active') {
+        game.scores[by] += 20;
+        lines.push(`${FOUR_SIDE[color]}'s zombie king is checkmated. ${FOUR_SIDE[by]} scores 20 points.`);
+      } else {
+        lines.push(`${FOUR_SIDE[color]}'s zombie king is checkmated.`);
+      }
+      fourRemoveKing(color);
+      game.states[color] = 'out';
+      game.lastMoves = [];
+      pushFourHistory(lines, 'Zombie Checkmated');
+      setLog(lines);
+      fourAdvanceTurn();
+    }
+
+    function fourZombieStale(color) {
+      const lines = [];
+      for (const other of FOUR_ORDER) {
+        if (game.states[other] !== 'active') continue;
+        game.scores[other] += 10;
+        lines.push(`${FOUR_SIDE[other]} receives 10 points.`);
+      }
+      lines.push(`${FOUR_SIDE[color]}'s zombie king is stalemated and removed.`);
+      fourRemoveKing(color);
+      game.states[color] = 'out';
+      game.lastMoves = [];
+      pushFourHistory(lines, 'Zombie Stalemated');
+      setLog(lines);
+      fourAdvanceTurn();
+    }
+
+    function fourResign() {
+      if (!game || !localMode || phase !== 'select') return;
+      const color = game.turn;
+      if (game.states[color] !== 'active') return;
+      if (isFourTeam()) {
+        const winner = fourTeam(color) === 'white' ? 'black' : 'white';
+        fourFinishTeams(winner, [`${FOUR_SIDE[color]} resigned.`], 'Resignation');
+        return;
+      }
+      const claim = fourCanClaim();
+      if (claim === color) {
+        fourClaim(color);
+        return;
+      }
+      fourMakeZombie(color, `${FOUR_SIDE[color]} resigned.`);
+    }
+
+    function fourClaim(color) {
+      const others = FOUR_ORDER.filter(other => other !== color && game.states[other] === 'active');
+      if (!others.length) return;
+      const other = others[0];
+      game.scores[other] += 20;
+      const lines = [`${FOUR_SIDE[color]} claims victory and awards ${FOUR_SIDE[other]} 20 points.`];
+      pushFourHistory(lines, 'Claim Victory');
+      setLog(lines);
+      fourFinishFfa();
+    }
+
+    function renderFour() {
+      boardEl.classList.add('four');
+      boardEl.innerHTML = '';
+      fourPanelEl.hidden = false;
+      clockBarEl.hidden = true;
+      capturedEl.w.hidden = true;
+      capturedEl.b.hidden = true;
+
+      const entry = reviewing && game.history ? game.history[reviewIndex] : null;
+      const board = entry ? entry.board : game.board;
+      const states = entry ? entry.states : game.states;
+      const scores = entry ? entry.scores : game.scores;
+      const lastMoves = entry ? entry.lastMoves : game.lastMoves;
+      const checked = FOUR_ORDER.filter(color => states[color] === 'active' && fourInCheckBoard(board, color, states))
+        .map(color => fourFindKing(board, color)).filter(Boolean);
+
+      for (let r = 0; r < FOUR_SIZE; r++) {
+        for (let c = 0; c < FOUR_SIZE; c++) {
+          const sq = document.createElement('div');
+          if (fourVoid(r, c)) {
+            sq.className = 'square void';
+            boardEl.appendChild(sq);
+            continue;
+          }
+          sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
+          if (lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
+          if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+          if (checked.some(([kr, kc]) => kr === r && kc === c)) sq.classList.add('in-check');
+          const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
+          if (target) {
+            sq.classList.add('target');
+            if (board[r][c]) sq.classList.add('capture');
+          }
+          const piece = board[r][c];
+          if (piece) {
+            if (states[piece.c] === 'frozen') sq.classList.add('frozen');
+            if (states[piece.c] === 'zombie') sq.classList.add('zombie');
+            const span = document.createElement('span');
+            span.className = 'piece ' + piece.c;
+            span.textContent = FOUR_GLYPHS[piece.c][piece.t];
+            sq.appendChild(span);
+          }
+          sq.addEventListener('click', () => onFourSquareClick(r, c));
+          boardEl.appendChild(sq);
+        }
+      }
+
+      fourPanelEl.innerHTML = '';
+      for (const color of FOUR_ORDER) {
+        const row = document.createElement('div');
+        row.className = 'four-row';
+        row.dataset.color = color;
+        const state = states[color];
+        if (color === game.turn && phase === 'select' && state === 'active') row.classList.add('active');
+        if (state !== 'active') row.classList.add('eliminated');
+        const name = document.createElement('span');
+        name.className = 'four-name';
+        const dot = document.createElement('span');
+        dot.className = 'four-dot ' + color;
+        name.appendChild(dot);
+        name.appendChild(document.createTextNode(FOUR_SIDE[color] + (isFourTeam() ? ` · ${fourTeam(color) === 'white' ? 'White' : 'Black'} Team` : '')));
+        const stateEl = document.createElement('span');
+        stateEl.className = 'four-state';
+        stateEl.textContent = state === 'active' ? '' : state === 'zombie' ? 'Zombie' : state === 'out' ? 'Out' : 'Frozen';
+        const time = document.createElement('span');
+        time.className = 'four-time';
+        time.textContent = game.clock ? clockText(game.clock.remaining[color]) : '--:--';
+        const score = document.createElement('span');
+        score.className = 'four-score';
+        score.textContent = isFourTeam() ? '' : String(scores[color]);
+        row.append(name, stateEl, time, score);
+        fourPanelEl.appendChild(row);
+      }
+      updateClockDisplay();
+
+      const showControls = localMode && !entry;
+      extraControlsEl.hidden = !showControls;
+      const claim = fourCanClaim();
+      resignBtnEl.hidden = !(showControls && phase === 'select' && game.states[game.turn] === 'active');
+      claimBtnEl.hidden = !(showControls && phase === 'select' && !!claim);
+      if (claim) claimBtnEl.textContent = `Claim Victory (${FOUR_SIDE[claim]})`;
+
+      const total = game.history ? game.history.length - 1 : 0;
+      reviewBtnEl.hidden = !(phase === 'over' && !entry && total > 0);
+      reviewBarEl.hidden = !entry;
+      if (entry) {
+        reviewLabelEl.textContent = `${entry.label} (${reviewIndex} / ${total})`;
+        reviewFirstEl.disabled = reviewPrevEl.disabled = reviewIndex === 0;
+        reviewNextEl.disabled = reviewLastEl.disabled = reviewIndex === total;
+      }
+    }
+
+    function normalizeControls(controls, colors) {
+      const out = {};
+      for (const color of colors) {
+        const raw = (controls && controls[color]) || {};
+        const minutes = Number(raw.minutes);
+        const increment = Number(raw.increment);
+        out[color] = {
+          minutes: Number.isFinite(minutes) ? Math.max(1, Math.min(180, Math.round(minutes))) : 5,
+          increment: Number.isFinite(increment) ? Math.max(0, Math.min(60, Math.round(increment))) : 0
+        };
+      }
+      return out;
+    }
+
+    function createClock(controls, colors) {
+      const normalized = normalizeControls(controls, colors);
+      const remaining = {};
+      for (const color of colors) remaining[color] = normalized[color].minutes * 60000;
+      const clock = { controls: normalized, remaining, active: [], last: Date.now() };
+      if (controls) lastTimeControl = normalized;
+      return clock;
+    }
+
+    function syncClock() {
+      if (!game || !game.clock) return;
+      const now = Date.now();
+      const elapsed = now - game.clock.last;
+      if (elapsed <= 0) return;
+      for (const color of game.clock.active) {
+        game.clock.remaining[color] = Math.max(0, game.clock.remaining[color] - elapsed);
+      }
+      game.clock.last = now;
+    }
+
+    function setClockActive(colors) {
+      if (!game || !game.clock) return;
+      syncClock();
+      game.clock.active = [...colors];
+      game.clock.last = Date.now();
+      updateClockDisplay();
+    }
+
+    function addIncrement(color) {
+      if (!game || !game.clock) return;
+      const control = game.clock.controls[color];
+      if (control && control.increment) game.clock.remaining[color] += control.increment * 1000;
+    }
+
+    function startClockForTurn() {
+      if (!game || !game.clock) return;
+      if (phase !== 'select') {
+        setClockActive([]);
+        return;
+      }
+      if (isSync()) {
+        setClockActive(['w', 'b'].filter(color => !pending[color]));
+      } else if (isFour()) {
+        const state = game.states ? game.states[game.turn] : 'active';
+        setClockActive(state === 'active' ? [game.turn] : []);
+      } else if (isDark() && localMode && (handoff || reviewing || handoffTimer !== null)) {
+        setClockActive([]);
+      } else {
+        setClockActive([game.turn]);
+      }
+    }
+
+    function clockText(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(total / 60);
+      const seconds = total % 60;
+      return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function updateClockElement(el, color) {
+      if (!game || !game.clock) return;
+      const control = game.clock.controls[color];
+      const timeEl = el.querySelector('.clock-time');
+      const labelEl = el.querySelector('.clock-label');
+      if (timeEl) timeEl.textContent = clockText(game.clock.remaining[color]);
+      if (labelEl && control) labelEl.textContent = `${colorName(color)} · ${control.minutes}+${control.increment}`;
+      el.classList.toggle('active', game.clock.active.includes(color));
+      el.classList.toggle('low', game.clock.remaining[color] <= 10000);
+    }
+
+    function updateClockDisplay() {
+      if (!game || !game.clock) {
+        clockBarEl.hidden = true;
+        return;
+      }
+      if (!isFour()) {
+        clockBarEl.hidden = false;
+        updateClockElement(clockEls.w, 'w');
+        updateClockElement(clockEls.b, 'b');
+      } else {
+        clockBarEl.hidden = true;
+        if (!fourPanelEl.hidden) {
+          for (const color of FOUR_ORDER) {
+            const row = fourPanelEl.querySelector(`[data-color="${color}"]`);
+            if (!row) continue;
+            const timeEl = row.querySelector('.four-time');
+            if (timeEl) timeEl.textContent = clockText(game.clock.remaining[color]);
+            row.classList.toggle('active', game.clock.active.includes(color));
+          }
+        }
+      }
+    }
+
+    setInterval(() => {
+      if (!game || !game.clock) return;
+      if (phase !== 'select') return;
+      syncClock();
+      checkClockTimeouts();
+      updateClockDisplay();
+    }, 200);
+
+    function checkClockTimeouts() {
+      if (!game || !game.clock || phase !== 'select' || timingOut) return;
+      for (const color of [...game.clock.active]) {
+        if (game.clock.remaining[color] > 0) continue;
+        handleTimeout(color);
+        return;
+      }
+    }
+
+    function handleTimeout(color) {
+      if (!game || !game.clock || phase !== 'select') return;
+      if (game.clock.remaining[color] > 0) return;
+      timingOut = true;
+      try {
+        syncClock();
+        game.clock.active = game.clock.active.filter(c => c !== color);
+        if (isFour()) {
+          if (!game.states || game.states[color] !== 'active') return;
+          fourMakeZombie(color, `${FOUR_SIDE[color]} ran out of time.`);
+          return;
+        }
+        const winner = opponent(color);
+        game.result = `Timeout - ${SIDE[winner]} Wins`;
+        phase = 'over';
+        const lines = [`${SIDE[color]} ran out of time.`, game.result];
+        pushHistory(lines, 'Timeout');
+        setLog(lines);
+        updateStatus();
+        render();
+        startClockForTurn();
+      } finally {
+        timingOut = false;
+      }
     }
 
     function isAttacked(board, r, c, byColor) {
@@ -1230,6 +2578,21 @@
 
     function updateStatus() {
       if (!game) return;
+      if (isFour()) {
+        if (phase === 'select') {
+          const state = game.states ? game.states[game.turn] : 'active';
+          if (state === 'zombie') {
+            setStatus(`${FOUR_SIDE[game.turn]} (zombie) is moving...`);
+          } else {
+            const check = fourInCheck(game.board, game.turn) ? ' (Check)' : '';
+            const scores = isFourTeam() ? '' : ` · R${game.scores.r} B${game.scores.b} Y${game.scores.y} G${game.scores.g}`;
+            setStatus(`${FOUR_SIDE[game.turn]} to Move${check}${scores}`);
+          }
+        } else if (phase === 'over') {
+          setStatus(game.result);
+        }
+        return;
+      }
       if (!isSync()) {
         if (phase === 'select') {
           const check = !isDark() && inCheck(game.board, game.turn) ? ' (Check)' : '';
@@ -1259,6 +2622,10 @@
     }
 
     function onSquareClick(r, c) {
+      if (isFour()) {
+        onFourSquareClick(r, c);
+        return;
+      }
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
       if (isDark() && localMode && darkView !== game.turn) return;
       if (isSync()) {
@@ -1321,6 +2688,7 @@
           logEl.textContent = 'White has locked in a move. Pass the device to Black.';
           updateStatus();
           render();
+          startClockForTurn();
         } else {
           resolveTurn();
         }
@@ -1333,6 +2701,7 @@
         logEl.textContent = `You locked in ${moveText(game.board, chosen)}. Waiting for your opponent's move.`;
         updateStatus();
         render();
+        startClockForTurn();
       }
     }
 
@@ -1343,7 +2712,10 @@
       }
       pending[opponent(myColor)] = move;
       if (phase === 'select' && pending[myColor]) resolveTurn();
-      else updateStatus();
+      else {
+        updateStatus();
+        startClockForTurn();
+      }
     }
 
     function setLog(lines) {
@@ -1379,6 +2751,7 @@
 
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
     function applyStandardMove(move, incoming = false) {
+      syncClock();
       const before = game.board;
       const moving = before[move.fr][move.fc];
       const fromType = moving.t;
@@ -1432,6 +2805,7 @@
       game.lastMoves = [move];
       game.turn = opponent(moving.c);
       darkView = moving.c;
+      addIncrement(moving.c);
 
       if (isKingHill()) {
         const king = findKing(board, moving.c);
@@ -1464,6 +2838,7 @@
       updateStatus();
       render();
       if (isDark() && localMode && phase === 'select') scheduleHandoff();
+      startClockForTurn();
     }
 
     // Dark Chess pass & play: hide the board before handing the device over.
@@ -1482,6 +2857,7 @@
       handoffEl.hidden = false;
       logEl.textContent = '';
       render();
+      startClockForTurn();
     }
 
     function endHandoff() {
@@ -1492,6 +2868,7 @@
       logEl.textContent = '';
       updateStatus();
       render();
+      startClockForTurn();
     }
 
     function resolveTurn() {
@@ -1505,6 +2882,7 @@
       logEl.textContent = notation;
       updateStatus();
       render();
+      startClockForTurn();
 
       const token = animationToken;
       let i = 0;
@@ -1563,6 +2941,9 @@
       if (outcome) game.result = outcome;
       phase = game.result ? 'over' : 'select';
       if (localMode) myColor = 'w';
+      syncClock();
+      addIncrement('w');
+      addIncrement('b');
 
       pushHistory(lines, `Turn ${game.history.length}`);
       logEl.innerHTML = '';
@@ -1573,6 +2954,7 @@
       }
       updateStatus();
       render();
+      startClockForTurn();
       if (phase === 'select' && pending.w && pending.b) resolveTurn();
     }
 
@@ -1617,6 +2999,15 @@
 
     function render() {
       if (!game) return;
+      if (isFour()) {
+        renderFour();
+        return;
+      }
+      boardEl.classList.remove('four');
+      fourPanelEl.hidden = true;
+      extraControlsEl.hidden = true;
+      capturedEl.w.hidden = false;
+      capturedEl.b.hidden = false;
       boardEl.innerHTML = '';
       const dark = isDark();
       const entry = reviewing && game.history ? game.history[reviewIndex] : null;
@@ -1687,6 +3078,7 @@
         reviewFirstEl.disabled = reviewPrevEl.disabled = reviewIndex === 0;
         reviewNextEl.disabled = reviewLastEl.disabled = reviewIndex === total;
       }
+      updateClockDisplay();
     }
 
     function send(msg) {
@@ -1695,6 +3087,7 @@
 
     function leaveGame() {
       animationToken++;
+      fourZombieToken++;
       localMode = false;
       clearTimeout(handoffTimer);
       handoffTimer = null;
@@ -1711,6 +3104,12 @@
       phase = null;
       game = null;
       panelEl.hidden = true;
+      fourPanelEl.hidden = true;
+      extraControlsEl.hidden = true;
+      clockBarEl.hidden = true;
+      capturedEl.w.hidden = false;
+      capturedEl.b.hidden = false;
+      boardEl.classList.remove('four');
     }
 
     function randomCode() {
@@ -1741,7 +3140,7 @@
           opponentLeft(c);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
-          newGame();
+          newGame(msg.controls || null);
         } else if (msg.type === 'move' && game) {
           receiveMove(msg.move);
         } else if (msg.type === 'full') {
@@ -1760,7 +3159,7 @@
 
     window.addEventListener('beforeunload', () => send({ type: 'bye' }));
 
-    function hostGame(attempt = 0) {
+    function hostGame(attempt = 0, controls = null) {
       leaveGame();
       myColor = 'w';
       const code = randomCode();
@@ -1781,13 +3180,13 @@
         }
         attachConnection(c);
         c.on('open', () => {
-          c.send({ type: 'start', kind: gameKind });
-          newGame();
+          c.send({ type: 'start', kind: gameKind, controls });
+          newGame(controls);
         });
       });
       p.on('error', err => {
         if (peer !== p) return;
-        if (err.type === 'unavailable-id' && attempt < 3) hostGame(attempt + 1);
+        if (err.type === 'unavailable-id' && attempt < 3) hostGame(attempt + 1, controls);
         else if (!conn) setStatus('Could Not Create Game - Try Again', true);
       });
     }
@@ -1825,6 +3224,75 @@
           setStatus('No Game Found', true);
         }
       }, 15000);
+    }
+
+    function openTimeModal(action) {
+      pendingAction = action;
+      timeFieldsEl.innerHTML = '';
+      const colors = isFour() ? FOUR_ORDER : ['w', 'b'];
+      const defaults = lastTimeControl || {};
+      const head = document.createElement('div');
+      head.className = 'time-row time-head';
+      head.innerHTML = '<span></span><span>Minutes</span><span>Increment</span>';
+      timeFieldsEl.appendChild(head);
+      for (const color of colors) {
+        const row = document.createElement('div');
+        row.className = 'time-row';
+        row.dataset.color = color;
+        const label = document.createElement('label');
+        label.textContent = colorName(color);
+        label.htmlFor = `time-min-${color}`;
+        const minutes = document.createElement('input');
+        minutes.className = 'time-min';
+        minutes.id = `time-min-${color}`;
+        minutes.type = 'number';
+        minutes.min = '1';
+        minutes.max = '180';
+        minutes.step = '1';
+        minutes.value = String((defaults[color] && defaults[color].minutes) || 5);
+        minutes.title = `${colorName(color)} minutes`;
+        const increment = document.createElement('input');
+        increment.className = 'time-inc';
+        increment.type = 'number';
+        increment.min = '0';
+        increment.max = '60';
+        increment.step = '1';
+        increment.value = String((defaults[color] && defaults[color].increment) || 0);
+        increment.title = `${colorName(color)} increment in seconds`;
+        row.append(label, minutes, increment);
+        timeFieldsEl.appendChild(row);
+      }
+      timeTitleEl.textContent = 'Time Control';
+      timeHelpEl.textContent = isFour()
+        ? 'Set minutes and increment independently for each player. Increment is added after every completed move.'
+        : 'Set minutes and increment for each player. Increment is added after every completed move.';
+      timeModalEl.hidden = false;
+      const first = timeFieldsEl.querySelector('input');
+      if (first) first.focus();
+    }
+
+    function closeTimeModal() {
+      timeModalEl.hidden = true;
+      pendingAction = null;
+    }
+
+    function collectTimeControls() {
+      const controls = {};
+      for (const row of timeFieldsEl.querySelectorAll('.time-row[data-color]')) {
+        const color = row.dataset.color;
+        controls[color] = {
+          minutes: Number(row.querySelector('.time-min').value),
+          increment: Number(row.querySelector('.time-inc').value)
+        };
+      }
+      return controls;
+    }
+
+    function applyTimePreset(minutes, increment) {
+      for (const row of timeFieldsEl.querySelectorAll('.time-row[data-color]')) {
+        row.querySelector('.time-min').value = String(minutes);
+        row.querySelector('.time-inc').value = String(increment);
+      }
     }
 
     function setGameKind(id) {
@@ -1883,6 +3351,12 @@
       reviewIndex = 0;
       reviewBarEl.hidden = true;
       reviewBtnEl.hidden = true;
+      fourPanelEl.hidden = true;
+      extraControlsEl.hidden = true;
+      clockBarEl.hidden = true;
+      capturedEl.w.hidden = false;
+      capturedEl.b.hidden = false;
+      boardEl.classList.remove('four');
       logEl.textContent = '';
       setStatus('Host or join a game');
     }
@@ -1914,6 +3388,13 @@
       if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu();
     });
     document.addEventListener('keydown', e => {
+      if (!timeModalEl.hidden) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeTimeModal();
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         closeMenu();
         if (reviewing) exitReview();
@@ -1937,15 +3418,49 @@
     setGameKind(gameKind);
 
     document.getElementById('local-btn').addEventListener('click', () => {
-      leaveGame();
-      localMode = true;
-      myColor = 'w';
-      newGame();
+      openTimeModal('local');
     });
-    document.getElementById('host-btn').addEventListener('click', () => hostGame());
+    document.getElementById('host-btn').addEventListener('click', () => {
+      if (isFour()) {
+        setStatus('4P Chess and 4P Teams are Pass & Play only for now.', true);
+        return;
+      }
+      openTimeModal('host');
+    });
     document.getElementById('join-btn').addEventListener('click', joinGame);
     document.getElementById('join-code').addEventListener('keydown', e => {
       if (e.key === 'Enter') joinGame();
+    });
+    timeCancelEl.addEventListener('click', closeTimeModal);
+    timeStartEl.addEventListener('click', () => {
+      const action = pendingAction;
+      const controls = collectTimeControls();
+      timeModalEl.hidden = true;
+      pendingAction = null;
+      if (action === 'host') {
+        hostGame(0, controls);
+      } else {
+        leaveGame();
+        localMode = true;
+        myColor = 'w';
+        newGame(controls);
+      }
+    });
+    timePresetsEl.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-minutes]');
+      if (!btn) return;
+      applyTimePreset(Number(btn.dataset.minutes), Number(btn.dataset.increment));
+    });
+    resignBtnEl.addEventListener('click', () => {
+      if (!isFour() || phase !== 'select') return;
+      const color = game.turn;
+      if (fourCanClaim() !== color && !confirm(`${FOUR_SIDE[color]} resign?`)) return;
+      fourResign();
+    });
+    claimBtnEl.addEventListener('click', () => {
+      if (!isFour() || phase !== 'select') return;
+      const color = fourCanClaim();
+      if (color) fourClaim(color);
     });
     handoffBtnEl.addEventListener('click', endHandoff);
     reviewBtnEl.addEventListener('click', enterReview);
