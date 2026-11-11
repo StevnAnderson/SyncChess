@@ -1048,6 +1048,7 @@
     const SIDE = { w: 'White', b: 'Black' };
     const FOUR_SIDE = { r: 'Red', b: 'Blue', y: 'Yellow', g: 'Green' };
     const FOUR_ORDER = ['r', 'b', 'y', 'g'];
+    const FOUR_JOIN_ORDER = ['y', 'b', 'g'];
     const FOUR_SIZE = 14;
     // Standard back ranks as seen from each player's own left to right.
     // White-team players have the king to the right of the queen; black-team
@@ -1140,6 +1141,8 @@
     let myColor = 'w';
     let peer = null;
     let conn = null;
+    let fourNetwork = null;
+    let applyingRemoteFourAction = false;
     let localMode = false;
     let lastHeard = 0;
     let handoff = false;
@@ -1168,6 +1171,19 @@
     const isFourTeam = () => gameKind === 'fourteam';
     const currentGame = () => GAMES.find(g => g.id === gameKind);
     const colorName = c => (isFour() ? FOUR_SIDE[c] : SIDE[c]) || FOUR_SIDE[c] || SIDE[c];
+    const fourCanControl = color => localMode || (!!fourNetwork && fourNetwork.ready && fourNetwork.color === color);
+    const fourNetworkStatus = () => {
+      if (!fourNetwork) return '';
+      if (fourNetwork.role === 'host') {
+        const count = (fourNetwork.opened ? fourNetwork.opened.size : 0) + 1;
+        return ` · Code ${fourNetwork.code} (${count}/4)`;
+      }
+      return ` · You are ${FOUR_SIDE[fourNetwork.color]}`;
+    };
+    function broadcastFour(msg) {
+      if (!fourNetwork || fourNetwork.role !== 'host') return;
+      for (const c of fourNetwork.connections.values()) if (c && c.open) c.send(msg);
+    }
     const activeColor = () => (localMode && !isSimultaneous() ? game.turn : myColor);
     const gameInProgress = () => !!game && phase !== 'over';
     const fourIndex = c => FOUR_ORDER.indexOf(c);
@@ -1370,7 +1386,7 @@
         clock: createClock(controls, FOUR_ORDER),
         history: []
       };
-      localMode = true;
+      localMode = !fourNetwork;
       phase = 'select';
       selected = null;
       pending = { w: null, b: null };
@@ -1704,8 +1720,10 @@
     }
 
     function onFourSquareClick(r, c) {
-      if (!game || !localMode || reviewing || phase !== 'select' || choosingPromotion) return;
+      if (!game || (!localMode && !fourNetwork) || (fourNetwork && !fourNetwork.ready) ||
+        (fourNetwork && fourNetwork.awaitingMove) || reviewing || phase !== 'select' || choosingPromotion) return;
       const color = game.turn;
+      if (!fourCanControl(color)) return;
       if (isSimultaneous() && game.roundMoves[color]) return;
       if (fourVoid(r, c) || game.states[game.turn] !== 'active') return;
       const piece = game.board[r][c];
@@ -1736,6 +1754,13 @@
 
     function submitFourMove(move, promo) {
       const color = game.turn;
+      if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
+        fourNetwork.awaitingMove = true;
+        send({ type: 'four-play', action: 'move', color: fourNetwork.color, move, promo });
+        render();
+        updateStatus();
+        return;
+      }
       syncClock();
       game.roundMoves[color] = { ...move, promo };
       addIncrement(color);
@@ -1745,6 +1770,7 @@
 
       const players = fourSyncPlayers();
       if (players.every(player => game.roundMoves[player])) {
+        broadcastFour({ type: 'four-lock', color, move, promo, nextTurn: game.turn });
         resolveFourRound();
         return;
       }
@@ -1754,6 +1780,7 @@
         next = nextFourColor(next);
       }
       game.turn = next;
+      broadcastFour({ type: 'four-lock', color, move, promo, nextTurn: next });
       setLog([`${FOUR_SIDE[color]} locked in a move. Pass the device to ${FOUR_SIDE[next]}.`]);
       updateStatus();
       render();
@@ -1815,6 +1842,12 @@
         submitFourMove(move, promo);
         return;
       }
+      if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
+        fourNetwork.awaitingMove = true;
+        send({ type: 'four-play', action: 'move', color: fourNetwork.color, move, promo, zombie });
+        render();
+        return;
+      }
       const before = cloneBoard(game.board);
       const moving = game.board[move.fr][move.fc];
       if (!moving) return;
@@ -1863,6 +1896,9 @@
       fourSyncCastling();
       game.lastMoves = [{ ...move, promo }];
       game.lastMover = color;
+      if (fourNetwork && fourNetwork.role === 'host') {
+        broadcastFour({ type: 'four-move', color, move, promo, zombie });
+      }
 
       if (!zombie) {
         addIncrement(color);
@@ -2069,13 +2105,17 @@
       return { before, board, frames, events, captures, enPassant, actions };
     }
 
-    function resolveFourRound() {
-      const actions = fourSyncPlayers().map(color => ({ color, move: { ...game.roundMoves[color] }, zombie: false }));
-      for (const color of FOUR_ORDER) {
-        if (game.states[color] !== 'zombie') continue;
-        const options = fourZombieMoves(color);
-        if (options.length) actions.push({ color, move: options[Math.floor(Math.random() * options.length)], zombie: true });
+    function resolveFourRound(actionsOverride = null, announce = true) {
+      let actions = actionsOverride;
+      if (!actions) {
+        actions = fourSyncPlayers().map(color => ({ color, move: { ...game.roundMoves[color] }, zombie: false }));
+        for (const color of FOUR_ORDER) {
+          if (game.states[color] !== 'zombie') continue;
+          const options = fourZombieMoves(color);
+          if (options.length) actions.push({ color, move: options[Math.floor(Math.random() * options.length)], zombie: true });
+        }
       }
+      if (announce) broadcastFour({ type: 'four-resolve', actions });
       const result = simulateFourRound(actions);
       phase = 'resolving';
       selected = null;
@@ -2272,7 +2312,7 @@
         setClockActive([]);
         updateStatus();
         render();
-        scheduleFourZombie();
+        if (!fourNetwork || fourNetwork.role === 'host') scheduleFourZombie();
         return;
       }
       if (!fourHasLegalMove(color)) {
@@ -2335,6 +2375,7 @@
         }
       }
       game.states[color] = 'zombie';
+      if (fourNetwork && fourNetwork.role === 'host') broadcastFour({ type: 'four-zombie', color, reason });
       game.lastMoves = [];
       const lines = [reason, `${FOUR_SIDE[color]}'s king remains and will move at random.`];
       pushFourHistory(lines, `${FOUR_SIDE[color]} Zombie`);
@@ -2353,7 +2394,7 @@
         }
         const players = fourSyncPlayers();
         if (players.every(player => game.roundMoves[player])) {
-          resolveFourRound();
+          if (!fourNetwork || fourNetwork.role !== 'client') resolveFourRound();
           return;
         }
         if (!players.includes(game.turn) || game.roundMoves[game.turn]) {
@@ -2482,6 +2523,7 @@
     }
 
     function fourZombieMate(color) {
+      if (fourNetwork && fourNetwork.role === 'host') broadcastFour({ type: 'four-zombie-outcome', color, outcome: 'mate' });
       const by = game.lastMover;
       const lines = [];
       if (by && game.states[by] === 'active') {
@@ -2499,6 +2541,7 @@
     }
 
     function fourZombieStale(color) {
+      if (fourNetwork && fourNetwork.role === 'host') broadcastFour({ type: 'four-zombie-outcome', color, outcome: 'stalemate' });
       const lines = [];
       for (const other of FOUR_ORDER) {
         if (game.states[other] !== 'active') continue;
@@ -2514,12 +2557,18 @@
       fourAdvanceTurn();
     }
 
-    function fourResign() {
-      if (!game || !localMode || phase !== 'select') return;
-      const color = game.turn;
+    function fourResign(colorOverride = null) {
+      if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
+        fourNetwork.awaitingMove = true;
+        send({ type: 'four-play', action: 'resign', color: fourNetwork.color });
+        return;
+      }
+      if (!game || (!localMode && (!fourNetwork || fourNetwork.role !== 'host') && !applyingRemoteFourAction) || phase !== 'select') return;
+      const color = colorOverride || game.turn;
       if (game.states[color] !== 'active') return;
       if (isFourTeam()) {
         const winner = fourTeam(color) === 'white' ? 'black' : 'white';
+        if (fourNetwork && fourNetwork.role === 'host') broadcastFour({ type: 'four-resign', color });
         fourFinishTeams(winner, [`${FOUR_SIDE[color]} resigned.`], 'Resignation');
         return;
       }
@@ -2532,9 +2581,15 @@
     }
 
     function fourClaim(color) {
+      if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
+        fourNetwork.awaitingMove = true;
+        send({ type: 'four-play', action: 'claim', color: fourNetwork.color });
+        return;
+      }
       const others = FOUR_ORDER.filter(other => other !== color && game.states[other] === 'active');
       if (!others.length) return;
       const other = others[0];
+      if (fourNetwork && fourNetwork.role === 'host') broadcastFour({ type: 'four-claim', color });
       game.scores[other] += 20;
       const lines = [`${FOUR_SIDE[color]} claims victory and awards ${FOUR_SIDE[other]} 20 points.`];
       pushFourHistory(lines, 'Claim Victory');
@@ -2629,11 +2684,11 @@
       }
       updateClockDisplay();
 
-      const showControls = localMode && !entry;
+      const showControls = (localMode || !!fourNetwork) && !entry;
       extraControlsEl.hidden = !showControls;
       const claim = fourCanClaim();
-      resignBtnEl.hidden = !(showControls && phase === 'select' && game.states[game.turn] === 'active');
-      claimBtnEl.hidden = !(showControls && phase === 'select' && !!claim);
+      resignBtnEl.hidden = !(showControls && fourCanControl(game.turn) && phase === 'select' && game.states[game.turn] === 'active');
+      claimBtnEl.hidden = !(showControls && fourCanControl(game.turn) && phase === 'select' && !!claim);
       if (claim) claimBtnEl.textContent = `Claim Victory (${FOUR_SIDE[claim]})`;
 
       const total = game.history ? game.history.length - 1 : 0;
@@ -2700,6 +2755,10 @@
 
     function startClockForTurn() {
       if (!game || !game.clock) return;
+      if (fourNetwork && !fourNetwork.ready) {
+        setClockActive([]);
+        return;
+      }
       if (phase !== 'select') {
         setClockActive([]);
         return;
@@ -2771,6 +2830,10 @@
       if (!game || !game.clock) return;
       if (phase !== 'select') return;
       syncClock();
+      if (isFour() && fourNetwork && fourNetwork.role === 'client') {
+        updateClockDisplay();
+        return;
+      }
       checkClockTimeouts();
       updateClockDisplay();
     }, 200);
@@ -3247,25 +3310,34 @@
     function updateStatus() {
       if (!game) return;
       if (isFour()) {
+        if (fourNetwork && !fourNetwork.ready) {
+          const who = 'Waiting for players';
+          setStatus(who + fourNetworkStatus());
+          return;
+        }
+        if (fourNetwork && fourNetwork.role === 'client' && fourNetwork.awaitingMove) {
+          setStatus(`Sending move to host${fourNetworkStatus()}`);
+          return;
+        }
         if (phase === 'select') {
           if (isSimultaneous()) {
             const players = fourSyncPlayers();
             const ready = players.filter(color => game.roundMoves[color]).length;
-            setStatus(game.roundMoves[game.turn]
+            setStatus((game.roundMoves[game.turn]
               ? `${FOUR_SIDE[game.turn]} has locked in a move · ${ready}/${players.length} ready`
-              : `${FOUR_SIDE[game.turn]}: Choose a Move · ${ready}/${players.length} ready`);
+              : `${FOUR_SIDE[game.turn]}: Choose a Move · ${ready}/${players.length} ready`) + fourNetworkStatus());
             return;
           }
           const state = game.states ? game.states[game.turn] : 'active';
           if (state === 'zombie') {
-            setStatus(`${FOUR_SIDE[game.turn]} (zombie) is moving...`);
+            setStatus(`${FOUR_SIDE[game.turn]} (zombie) is moving...${fourNetworkStatus()}`);
           } else {
             const check = fourInCheck(game.board, game.turn) ? ' (Check)' : '';
             const scores = isFourTeam() ? '' : ` · R${game.scores.r} B${game.scores.b} Y${game.scores.y} G${game.scores.g}`;
-            setStatus(`${FOUR_SIDE[game.turn]} to Move${check}${scores}`);
+            setStatus(`${FOUR_SIDE[game.turn]} to Move${check}${scores}${fourNetworkStatus()}`);
           }
         } else if (phase === 'over') {
-          setStatus(game.result);
+          setStatus(`${game.result}${fourNetworkStatus()}`);
         } else if (phase === 'resolving') {
           setStatus('Moves in Progress...');
         }
@@ -3784,6 +3856,8 @@
       animationToken++;
       fourZombieToken++;
       localMode = false;
+      const oldFourNetwork = fourNetwork;
+      fourNetwork = null;
       clearTimeout(handoffTimer);
       handoffTimer = null;
       handoff = false;
@@ -3792,6 +3866,9 @@
       reviewIndex = 0;
       reviewBarEl.hidden = true;
       reviewBtnEl.hidden = true;
+      if (oldFourNetwork && oldFourNetwork.connections) {
+        for (const c of oldFourNetwork.connections.values()) if (c && c.open) c.close();
+      }
       if (conn) conn.close();
       if (peer) peer.destroy();
       conn = null;
@@ -3820,9 +3897,133 @@
       if (game && phase !== 'over') {
         animationToken++;
         phase = 'over';
-        game.result = 'Opponent Disconnected';
+        game.result = fourNetwork && fourNetwork.role === 'client'
+          ? (fourNetwork.ready ? 'Host Disconnected' : 'Lobby Connection Lost')
+          : 'Opponent Disconnected';
+        fourNetwork = null;
         updateStatus();
         render();
+      }
+    }
+
+    function applyRemoteFourMessage(msg) {
+      if (!fourNetwork || fourNetwork.role !== 'client' || !game) return;
+      if (msg.type === 'four-ready') {
+        fourNetwork.ready = true;
+        fourNetwork.awaitingMove = false;
+        updateStatus();
+        render();
+        startClockForTurn();
+      } else if (msg.type === 'four-lock') {
+        syncClock();
+        game.roundMoves[msg.color] = { ...msg.move, promo: msg.promo };
+        addIncrement(msg.color);
+        game.turn = msg.nextTurn;
+        selected = null;
+        fourNetwork.awaitingMove = false;
+        setLog([`${FOUR_SIDE[msg.color]} locked in a move.`]);
+        updateStatus();
+        render();
+        startClockForTurn();
+      } else if (msg.type === 'four-resolve') {
+        fourNetwork.awaitingMove = false;
+        resolveFourRound(msg.actions, false);
+      } else if (msg.type === 'four-move') {
+        fourNetwork.awaitingMove = false;
+        applyingRemoteFourAction = true;
+        applyFourMove(msg.move, msg.promo, !!msg.zombie);
+        applyingRemoteFourAction = false;
+      } else if (msg.type === 'four-zombie') {
+        fourNetwork.awaitingMove = false;
+        applyingRemoteFourAction = true;
+        fourMakeZombie(msg.color, msg.reason);
+        applyingRemoteFourAction = false;
+      } else if (msg.type === 'four-zombie-outcome') {
+        applyingRemoteFourAction = true;
+        if (msg.outcome === 'mate') fourZombieMate(msg.color);
+        else fourZombieStale(msg.color);
+        applyingRemoteFourAction = false;
+      } else if (msg.type === 'four-resign') {
+        fourNetwork.awaitingMove = false;
+        applyingRemoteFourAction = true;
+        fourResign(msg.color);
+        applyingRemoteFourAction = false;
+      } else if (msg.type === 'four-claim') {
+        fourNetwork.awaitingMove = false;
+        applyingRemoteFourAction = true;
+        fourClaim(msg.color);
+        applyingRemoteFourAction = false;
+      } else if (msg.type === 'four-end') {
+        fourFinish(msg.result, msg.lines || [], msg.label || 'Game Over');
+      } else if (msg.type === 'four-reject') {
+        fourNetwork.awaitingMove = false;
+        setStatus(msg.message || 'Move was rejected', true);
+      }
+    }
+
+    function sameFourMove(a, b) {
+      return a.fr === b.fr && a.fc === b.fc && a.tr === b.tr && a.tc === b.tc &&
+        (a.castle || null) === (b.castle || null) &&
+        JSON.stringify(a.enPassant || null) === JSON.stringify(b.enPassant || null);
+    }
+
+    function validateFourNetworkMove(color, move, promo) {
+      if (!move || !game || phase !== 'select' || game.turn !== color || game.states[color] !== 'active') return null;
+      if (!inBounds(move.fr, move.fc, FOUR_SIZE)) return null;
+      const piece = game.board[move.fr][move.fc];
+      if (!piece || piece.c !== color) return null;
+      const legal = fourLegalMoves(game.board, move.fr, move.fc).find(candidate => sameFourMove(candidate, move));
+      if (!legal) return null;
+      const chosenPromotion = legal.promotion
+        ? (isFourTeam() && ['q', 'r', 'b', 'n'].includes(promo) ? promo : 'q')
+        : null;
+      return { move: legal, promo: chosenPromotion };
+    }
+
+    function handleFourHostMessage(color, c, msg) {
+      if (!fourNetwork || fourNetwork.role !== 'host' || !msg) return;
+      if (msg.type === 'bye') {
+        handleFourDisconnect(color, c);
+        return;
+      }
+      if (msg.type !== 'four-play') return;
+      if (!fourNetwork.ready || fourNetwork.connections.get(color) !== c || msg.color !== color) {
+        c.send({ type: 'four-reject', message: 'This seat is not ready.' });
+        return;
+      }
+      if (msg.action === 'move') {
+        const valid = validateFourNetworkMove(color, msg.move, msg.promo);
+        if (!valid) {
+          c.send({ type: 'four-reject', message: 'That move is no longer legal.' });
+          return;
+        }
+        if (isSimultaneous()) submitFourMove(valid.move, valid.promo);
+        else applyFourMove(valid.move, valid.promo);
+      } else if (msg.action === 'resign' && game.turn === color) {
+        fourResign(color);
+      } else if (msg.action === 'claim' && game.turn === color && fourCanClaim() === color) {
+        fourClaim(color);
+      }
+    }
+
+    function handleFourDisconnect(color, c) {
+      if (!fourNetwork || fourNetwork.role !== 'host') return;
+      fourNetwork.opened.delete(color);
+      if (!fourNetwork.started) {
+        if (fourNetwork.connections.get(color) === c) fourNetwork.connections.delete(color);
+        updateStatus();
+        render();
+        return;
+      }
+      if (fourNetwork.connections.get(color) !== c || game.states[color] !== 'active') return;
+      if (isFourTeam()) {
+        const winner = fourTeam(color) === 'white' ? 'black' : 'white';
+        const result = `4P Teams - ${winner === 'white' ? 'White Team (Red & Yellow)' : 'Black Team (Blue & Green)'} Wins`;
+        const lines = [`${FOUR_SIDE[color]} disconnected.`];
+        broadcastFour({ type: 'four-end', result, lines, label: 'Disconnect' });
+        fourFinish(result, lines, 'Disconnect');
+      } else {
+        fourMakeZombie(color, `${FOUR_SIDE[color]} disconnected.`);
       }
     }
 
@@ -3837,6 +4038,16 @@
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
           newGame(msg.controls || null);
+        } else if (msg.type === 'four-start') {
+          setGameKind(msg.kind === 'fourteam' ? 'fourteam' : 'four');
+          simultaneousMode = msg.simultaneous === true;
+          fourNetwork = {
+            role: 'client', color: FOUR_JOIN_ORDER.includes(msg.color) ? msg.color : 'y',
+            ready: !!msg.ready, openedCount: msg.openedCount || 2, awaitingMove: false
+          };
+          newFourGame(msg.controls || null);
+        } else if (msg.type.startsWith('four-')) {
+          applyRemoteFourMessage(msg);
         } else if (msg.type === 'move' && game) {
           receiveMove(msg.move);
         } else if (msg.type === 'full') {
@@ -3848,12 +4059,82 @@
     }
 
     setInterval(() => {
+      if (fourNetwork && fourNetwork.role === 'host') {
+        broadcastFour({ type: 'ping' });
+        return;
+      }
       if (!conn || !conn.open) return;
       send({ type: 'ping' });
       if (game && Date.now() - lastHeard > 10000) opponentLeft(conn);
     }, 2000);
 
-    window.addEventListener('beforeunload', () => send({ type: 'bye' }));
+    window.addEventListener('beforeunload', () => {
+      send({ type: 'bye' });
+      broadcastFour({ type: 'bye' });
+    });
+
+    function hostFourGame(controls, attempt = 0) {
+      leaveGame();
+      localMode = false;
+      fourNetwork = {
+        role: 'host', color: 'r', code: randomCode(), controls, kind: gameKind,
+        connections: new Map(), opened: new Set(), ready: false, started: false
+      };
+      const network = fourNetwork;
+      newFourGame(controls);
+      const p = new Peer(PEER_PREFIX + network.code);
+      peer = p;
+      p.on('open', () => {
+        if (fourNetwork !== network) return;
+        updateStatus();
+      });
+      p.on('connection', c => {
+        if (fourNetwork !== network || network.started) {
+          c.on('open', () => {
+            c.send({ type: 'full' });
+            setTimeout(() => c.close(), 500);
+          });
+          return;
+        }
+        const color = FOUR_JOIN_ORDER.find(seat => !network.connections.has(seat));
+        if (!color) {
+          c.on('open', () => {
+            c.send({ type: 'full' });
+            setTimeout(() => c.close(), 500);
+          });
+          return;
+        }
+        network.connections.set(color, c);
+        c.on('data', msg => {
+          if (msg.type === 'ping') return;
+          handleFourHostMessage(color, c, msg);
+        });
+        c.on('close', () => handleFourDisconnect(color, c));
+        c.on('open', () => {
+          if (fourNetwork !== network || network.connections.get(color) !== c) return;
+          network.opened.add(color);
+          const becameReady = network.opened.size === FOUR_JOIN_ORDER.length;
+          if (becameReady) {
+            network.ready = true;
+            network.started = true;
+          }
+          c.send({
+            type: 'four-start', kind: network.kind, controls: network.controls,
+            simultaneous: isSimultaneous(), color, ready: network.ready,
+            openedCount: network.opened.size + 1
+          });
+          if (becameReady) broadcastFour({ type: 'four-ready' });
+          updateStatus();
+          render();
+          startClockForTurn();
+        });
+      });
+      p.on('error', err => {
+        if (peer !== p) return;
+        if (err.type === 'unavailable-id' && attempt < 3) hostFourGame(controls, attempt + 1);
+        else if (!network.opened.size) setStatus('Could Not Create Game - Try Again', true);
+      });
+    }
 
     function hostGame(attempt = 0, controls = null) {
       leaveGame();
@@ -4122,10 +4403,6 @@
       openTimeModal('local');
     });
     document.getElementById('host-btn').addEventListener('click', () => {
-      if (isFour()) {
-        setStatus('4P Chess and 4P Teams are Pass & Play only for now.', true);
-        return;
-      }
       openTimeModal('host');
     });
     document.getElementById('join-btn').addEventListener('click', joinGame);
@@ -4140,7 +4417,8 @@
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
-        hostGame(0, controls);
+        if (isFour()) hostFourGame(controls);
+        else hostGame(0, controls);
       } else {
         leaveGame();
         localMode = true;
