@@ -1933,7 +1933,7 @@
     function buildFourPath(move, piece) {
       const dr = Math.sign(move.tr - move.fr);
       const dc = Math.sign(move.tc - move.fc);
-      const sliding = 'rbq'.includes(piece.t) || (piece.t === 'p' && move.double);
+      const sliding = 'rbq'.includes(piece.t) || (piece.t === 'p' && move.double) || !!move.castle;
       if (!sliding) return [[move.tr, move.tc]];
       const path = [];
       let r = move.fr + dr, c = move.fc + dc;
@@ -1963,16 +1963,6 @@
         };
         action.main = main;
         movers.push(main);
-        if (action.move.castle && action.move.rookFrom && action.move.rookTo) {
-          const rook = board[action.move.rookFrom[0]][action.move.rookFrom[1]];
-          if (rook) movers.push({
-            action, piece: rook, color: action.color, main: false,
-            pos: [...action.move.rookFrom],
-            path: buildFourPath({ fr: action.move.rookFrom[0], fc: action.move.rookFrom[1],
-              tr: action.move.rookTo[0], tc: action.move.rookTo[1] }, rook),
-            idx: 0, alive: true, done: false, targetsPiece: false
-          });
-        }
       }
       const moverAt = square => movers.find(m => m.alive && m.pos[0] === square[0] && m.pos[1] === square[1]);
       const hasNonDelayedMove = actions.some(action => action.main && !action.main.piece.delayed);
@@ -2099,6 +2089,22 @@
             events.push(`${FOUR_SIDE[mover.color]}'s Pawn promoted to a ${NAMES[mover.piece.t]}.`);
           }
         }
+        frames.push(cloneBoard(board));
+      }
+
+      // Castling moves the king and rook as one coordinated move. Animate and
+      // resolve collisions for the king's path, then place the rook beside it;
+      // the two allied pieces must not intercept or capture each other.
+      for (const action of actions) {
+        const kingMover = action.main;
+        if (!action.move.castle || !kingMover || !kingMover.alive || !kingMover.done ||
+          !action.move.rookFrom || !action.move.rookTo) continue;
+        const [fromR, fromC] = action.move.rookFrom;
+        const [toR, toC] = action.move.rookTo;
+        const rook = board[fromR][fromC];
+        if (!rook || rook.c !== action.color || rook.t !== 'r') continue;
+        board[fromR][fromC] = null;
+        board[toR][toC] = rook;
         frames.push(cloneBoard(board));
       }
 
@@ -2778,10 +2784,10 @@
           const state = game.states ? game.states[game.turn] : 'active';
           setClockActive(state === 'active' ? [game.turn] : []);
         }
-      } else if (isSimultaneous()) {
-        setClockActive(['w', 'b'].filter(color => !pending[color]));
       } else if (isDark() && localMode && (handoff || reviewing || handoffTimer !== null)) {
         setClockActive([]);
+      } else if (isSimultaneous()) {
+        setClockActive(['w', 'b'].filter(color => !pending[color]));
       } else {
         setClockActive([game.turn]);
       }
@@ -3454,11 +3460,15 @@
       if (localMode) {
         if (myColor === 'w') {
           myColor = 'b';
-          darkView = 'b';
-          logEl.textContent = 'White has locked in a move. Pass the device to Black.';
-          updateStatus();
-          render();
-          startClockForTurn();
+          if (isDark()) {
+            beginHandoff();
+          } else {
+            darkView = 'b';
+            logEl.textContent = 'White has locked in a move. Pass the device to Black.';
+            updateStatus();
+            render();
+            startClockForTurn();
+          }
         } else {
           resolveTurn();
         }
@@ -3622,8 +3632,9 @@
       if (!game || phase === 'over') return;
       handoff = true;
       selected = null;
-      handoffTitleEl.textContent = `Pass to the ${SIDE[game.turn]} player`;
-      handoffBtnEl.textContent = `I am the ${SIDE[game.turn]} Player`;
+      const nextPlayer = isSimultaneous() ? myColor : game.turn;
+      handoffTitleEl.textContent = `Pass the device to the ${SIDE[nextPlayer]} player`;
+      handoffBtnEl.textContent = `I'm the ${SIDE[nextPlayer]} Player`;
       handoffEl.hidden = false;
       logEl.textContent = '';
       render();
@@ -3633,7 +3644,7 @@
     function endHandoff() {
       handoff = false;
       selected = null;
-      darkView = game.turn;
+      darkView = isSimultaneous() ? myColor : game.turn;
       handoffEl.hidden = true;
       logEl.textContent = '';
       updateStatus();
@@ -3739,7 +3750,8 @@
       }
       updateStatus();
       render();
-      startClockForTurn();
+      if (phase === 'select' && isDark() && localMode) beginHandoff();
+      else startClockForTurn();
       if (phase === 'select' && pending.w && pending.b) resolveTurn();
     }
 
