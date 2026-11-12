@@ -2759,12 +2759,39 @@
       game.clock.last = now;
     }
 
+    function publishNetworkClock() {
+      if (!game || !game.clock || phase !== 'select') return;
+      const message = {
+        type: 'clock-sync',
+        remaining: Object.fromEntries(Object.entries(game.clock.remaining)
+          .map(([color, ms]) => [color, Number.isFinite(ms) ? ms : 'infinite'])),
+        active: [...game.clock.active]
+      };
+      if (fourNetwork && fourNetwork.role === 'host') broadcastFour(message);
+      else if (!localMode && myColor === 'w' && conn && conn.open) send(message);
+    }
+
+    function applyNetworkClock(message) {
+      if (!game || !game.clock || !message || !message.remaining) return;
+      for (const color of Object.keys(game.clock.remaining)) {
+        if (!(color in message.remaining)) continue;
+        const value = message.remaining[color];
+        game.clock.remaining[color] = value === 'infinite' ? Infinity : Math.max(0, Number(value) || 0);
+      }
+      game.clock.active = Array.isArray(message.active)
+        ? message.active.filter(color => color in game.clock.remaining)
+        : [];
+      game.clock.last = Date.now();
+      updateClockDisplay();
+    }
+
     function setClockActive(colors) {
       if (!game || !game.clock) return;
       syncClock();
       game.clock.active = [...colors];
       game.clock.last = Date.now();
       updateClockDisplay();
+      publishNetworkClock();
     }
 
     function addIncrement(color) {
@@ -2854,8 +2881,13 @@
         updateClockDisplay();
         return;
       }
+      if (!localMode && conn && myColor === 'b') {
+        updateClockDisplay();
+        return;
+      }
       checkClockTimeouts();
       updateClockDisplay();
+      publishNetworkClock();
     }, 200);
 
     function checkClockTimeouts() {
@@ -2879,18 +2911,26 @@
           fourMakeZombie(color, `${FOUR_SIDE[color]} ran out of time.`);
           return;
         }
-        const winner = opponent(color);
-        game.result = `Timeout - ${SIDE[winner]} Wins`;
-        phase = 'over';
-        const lines = [`${SIDE[color]} ran out of time.`, game.result];
-        pushHistory(lines, 'Timeout');
-        setLog(lines);
-        updateStatus();
-        render();
-        startClockForTurn();
+        if (!localMode && myColor === 'w' && conn && conn.open) send({ type: 'timeout', color });
+        finishNetworkTimeout(color);
       } finally {
         timingOut = false;
       }
+    }
+
+    function finishNetworkTimeout(color) {
+      if (!game || !game.clock || phase !== 'select') return;
+      game.clock.remaining[color] = 0;
+      game.clock.active = [];
+      const winner = opponent(color);
+      game.result = `Timeout - ${SIDE[winner]} Wins`;
+      phase = 'over';
+      const lines = [`${SIDE[color]} ran out of time.`, game.result];
+      pushHistory(lines, 'Timeout');
+      setLog(lines);
+      updateStatus();
+      render();
+      startClockForTurn();
     }
 
     function isAttacked(board, r, c, byColor) {
@@ -4070,6 +4110,10 @@
         lastHeard = Date.now();
         if (msg.type === 'bye') {
           opponentLeft(c);
+        } else if (msg.type === 'clock-sync') {
+          applyNetworkClock(msg);
+        } else if (msg.type === 'timeout') {
+          finishNetworkTimeout(msg.color);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
