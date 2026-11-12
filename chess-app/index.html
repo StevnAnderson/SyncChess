@@ -1240,7 +1240,7 @@
     const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1];
     const squareName = ([r, c]) => FILES[c] + (8 - r);
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
-    const isSimultaneous = () => gameKind === 'sync' || (gameKind !== 'crazyhouse' && simultaneousMode);
+    const isSimultaneous = () => gameKind === 'sync' || simultaneousMode;
     const isDark = () => gameKind === 'dark';
     const isMemory = () => gameKind === 'memory';
     const isCrazyhouse = () => gameKind === 'crazyhouse';
@@ -3669,7 +3669,7 @@
     function chooseCrazyhouseReserve(color, id) {
       if (!isCrazyhouse() || !game || spectatorMode || reviewing || phase !== 'select' || choosingPromotion) return;
       const actor = activeColor();
-      if (color !== actor || game.turn !== actor) return;
+      if (color !== actor || (!isSimultaneous() && game.turn !== actor) || (isSimultaneous() && pending[actor])) return;
       const piece = game.captured[color].find(item => item.id === id);
       if (!piece) return;
       if (selectedDrop && selectedDrop.id === id && selectedDrop.color === color) selectedDrop = null;
@@ -3755,6 +3755,60 @@
         updateStatus();
         startClockForTurn();
       }
+    }
+
+    function simulateCrazyhouseDrops(g, selections) {
+      const board = cloneBoard(g.board);
+      const events = [];
+      const captured = [];
+      const capturers = new Set();
+      const enPassant = [];
+
+      // Resolve ordinary moves from the shared starting position, then place drops.
+      // A drop is instantaneous, so it cannot intercept a piece already travelling.
+      for (const move of selections.filter(selection => !selection.drop)) {
+        const moving = board[move.fr][move.fc];
+        if (!moving) continue;
+        const target = board[move.tr][move.tc];
+        if (target) {
+          captured.push(target);
+          capturers.add(moving);
+          events.push(`${SIDE[moving.c]}'s ${NAMES[moving.t]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
+        }
+        if (move.enPassant) {
+          const victim = board[move.victim[0]][move.victim[1]];
+          if (victim) {
+            captured.push(victim);
+            capturers.add(moving);
+            board[move.victim[0]][move.victim[1]] = null;
+          }
+        }
+        const next = applySingleMove(board, move);
+        if (moving.t === 'p' && (move.tr === 0 || move.tr === 7)) {
+          const placed = next[move.tr][move.tc];
+          if (placed) {
+            placed.t = move.promo || 'q';
+            placed.promoted = true;
+          }
+        }
+        for (let r = 0; r < 8; r++) board[r] = next[r];
+        if (move.double) enPassant.push({
+          color: moving.c, square: [(move.fr + move.tr) / 2, move.fc], victim: [move.tr, move.tc]
+        });
+      }
+
+      for (const move of selections.filter(selection => selection.drop)) {
+        const inventory = g.captured[move.dropColor];
+        const index = inventory.findIndex(piece => piece.id === move.dropId && piece.t === move.dropType);
+        if (index < 0 || board[move.tr][move.tc] || !crazyhouseDropAllowed(board, move.dropColor, move.dropType, move.tr, move.tc)) {
+          events.push(`${SIDE[move.dropColor]}'s drop on ${squareName([move.tr, move.tc])} was blocked.`);
+          continue;
+        }
+        const reserve = inventory.splice(index, 1)[0];
+        board[move.tr][move.tc] = { ...reserve, c: move.dropColor, delayed: false, promoted: false };
+        events.push(`${SIDE[move.dropColor]} dropped a ${NAMES[move.dropType]} on ${squareName([move.tr, move.tc])}.`);
+      }
+      return { board, frames: [cloneBoard(board)], events, capturers, captured, enPassant };
     }
 
     function setLog(lines) {
@@ -3956,7 +4010,9 @@
       const selections = [pending.w, pending.b];
       const notation = `White: ${moveText(game.board, pending.w)}   Black: ${moveText(game.board, pending.b)}`;
       const before = game.board;
-      const result = simulate(game, selections);
+      const result = isCrazyhouse() && selections.some(move => move.drop)
+        ? simulateCrazyhouseDrops(game, selections)
+        : simulate(game, selections);
       pending = { w: null, b: null };
       phase = 'resolving';
       game.lastMoves = selections;
@@ -4184,7 +4240,9 @@
             button.textContent = GLYPHS[reserve.c][reserve.t];
             button.setAttribute('aria-label', `${SIDE[inventoryColor]} reserve ${NAMES[reserve.t]}`);
             const canSelect = !entry && phase === 'select' && !spectatorMode &&
-              game.turn === (localMode ? game.turn : myColor) && inventoryColor === (localMode ? game.turn : myColor);
+              (isSimultaneous()
+                ? inventoryColor === myColor && !pending[myColor]
+                : inventoryColor === (localMode ? game.turn : myColor));
             button.disabled = !canSelect;
             if (selectedDrop && selectedDrop.color === inventoryColor && selectedDrop.id === reserve.id) {
               button.classList.add('selected');
@@ -4864,10 +4922,10 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync' || isCrazyhouse();
+      syncModeOptionEl.hidden = gameKind === 'sync';
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
-      syncModeInputEl.checked = !isCrazyhouse() && simultaneousMode;
+      syncModeInputEl.checked = simultaneousMode;
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
         : 'Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.';
@@ -5044,7 +5102,7 @@
       const action = pendingAction;
       const controls = collectTimeControls();
       const allowSpectators = allowSpectatorsInputEl.checked;
-      simultaneousMode = gameKind === 'sync' || (gameKind !== 'crazyhouse' && syncModeInputEl.checked);
+      simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
