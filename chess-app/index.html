@@ -3960,7 +3960,10 @@
       const board = entry ? entry.board : game.board;
       const captured = entry ? entry.captured : game.captured;
       const lastMoves = entry ? entry.lastMoves : game.lastMoves;
-      const visible = dark && !entry && !spectatorMode ? visibleSquares(localMode ? darkView : myColor) : null;
+      const hideDarkSyncAnimation = dark && localMode && isSimultaneous() && phase === 'resolving';
+      const visible = dark && !entry && !spectatorMode
+        ? (hideDarkSyncAnimation ? new Set() : visibleSquares(localMode ? darkView : myColor))
+        : null;
       const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(board, c)).map(c => findKing(board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
