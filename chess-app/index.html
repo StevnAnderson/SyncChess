@@ -642,17 +642,20 @@
       border-color: var(--accent);
     }
 
-    #sync-mode-option {
+    #sync-mode-option,
+    #spectators-option {
       display: block;
       margin: 0 0 0.9rem;
       color: var(--text-main);
     }
 
-    #sync-mode-option[hidden] {
+    #sync-mode-option[hidden],
+    #spectators-option[hidden] {
       display: none;
     }
 
-    #sync-mode-option input {
+    #sync-mode-option input,
+    #spectators-option input {
       margin-right: 0.4rem;
       accent-color: var(--accent);
     }
@@ -911,6 +914,8 @@
         <button class="btn" id="claim-btn" type="button" hidden>Claim Victory</button>
       </div>
       <button class="btn" id="review-btn" type="button" hidden>Review Game</button>
+      <button class="btn" id="rematch-btn" type="button" hidden>Rematch</button>
+      <span id="rematch-status" aria-live="polite" hidden></span>
       <div class="review-bar" id="review-bar" role="group" aria-label="Game review controls" hidden>
         <button class="btn" id="review-first" type="button" aria-label="First position" title="First position">&laquo;</button>
         <button class="btn" id="review-prev" type="button" aria-label="Previous move" title="Previous move">&lsaquo;</button>
@@ -1023,6 +1028,16 @@
         <li>In Sync mode, if two moving pieces collide in transit, both are removed. If a piece intercepts another piece that has arrived on its path, the intercepted piece is taken, the mover stops, and the mover is Delayed next round. This collision can take a teammate&rsquo;s piece.</li>
       </ul>
     </div>
+
+    <div class="rules-panel" id="rules-fourteam2" hidden>
+      <h2>How 4P Teams (2P) Works</h2>
+      <ul>
+        <li>The same 4P Teams rules apply, but Red and Yellow are controlled by one player against one player controlling Blue and Green.</li>
+        <li>Turns proceed clockwise, or all four pieces can move simultaneously when Sync mode is enabled.</li>
+        <li>Checkmate one member of the opposing team to win. Stalemating a player draws the game.</li>
+        <li>Castling, pawn promotion, and en passant follow the same rules as 4P Teams.</li>
+      </ul>
+    </div>
   </div>
 
   <div class="modal-overlay" id="time-modal" hidden>
@@ -1037,6 +1052,7 @@
         <button type="button" data-minutes="10" data-increment="0">10 + 0</button>
       </div>
       <label id="sync-mode-option" hidden><input id="sync-mode" type="checkbox"> Play in Sync mode (both players choose before moves resolve)</label>
+      <label id="spectators-option" hidden><input id="allow-spectators" type="checkbox"> Allow Spectators</label>
       <div class="time-fields" id="time-fields"></div>
       <div class="time-actions">
         <button class="btn secondary" id="time-cancel" type="button">Cancel</button>
@@ -1069,6 +1085,7 @@
     const GAMES = [
       { id: 'four', name: '4P Chess' },
       { id: 'fourteam', name: '4P Teams' },
+      { id: 'fourteam2', name: '4P Teams (2P)' },
       { id: 'atomic', name: 'Atomic' },
       { id: 'chess', name: 'Chess' },
       { id: 'dark', name: 'Dark Chess' },
@@ -1091,6 +1108,7 @@
     const rulesEl = {
       four: document.getElementById('rules-four'),
       fourteam: document.getElementById('rules-fourteam'),
+      fourteam2: document.getElementById('rules-fourteam2'),
       atomic: document.getElementById('rules-atomic'),
       chess: document.getElementById('rules-chess'),
       dark: document.getElementById('rules-dark'),
@@ -1110,6 +1128,8 @@
       b: document.getElementById('captured-by-black')
     };
     const reviewBtnEl = document.getElementById('review-btn');
+    const rematchBtnEl = document.getElementById('rematch-btn');
+    const rematchStatusEl = document.getElementById('rematch-status');
     const reviewBarEl = document.getElementById('review-bar');
     const reviewLabelEl = document.getElementById('review-label');
     const reviewFirstEl = document.getElementById('review-first');
@@ -1132,6 +1152,8 @@
     const timePresetsEl = document.getElementById('time-presets');
     const syncModeOptionEl = document.getElementById('sync-mode-option');
     const syncModeInputEl = document.getElementById('sync-mode');
+    const spectatorsOptionEl = document.getElementById('spectators-option');
+    const allowSpectatorsInputEl = document.getElementById('allow-spectators');
     const timeCancelEl = document.getElementById('time-cancel');
     const timeStartEl = document.getElementById('time-start');
 
@@ -1148,6 +1170,12 @@
     let peer = null;
     let conn = null;
     let fourNetwork = null;
+    let spectatorMode = false;
+    let hostedSpectators = new Set();
+    let hostAllowsSpectators = false;
+    let twoPlayerRematchRequests = new Set();
+    let rematchRequesters = [];
+    let rematchRequired = [];
     let applyingRemoteFourAction = false;
     let localMode = false;
     let lastHeard = 0;
@@ -1173,22 +1201,58 @@
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
-    const isFour = () => gameKind === 'four' || gameKind === 'fourteam';
-    const isFourTeam = () => gameKind === 'fourteam';
+    const isFour = () => gameKind === 'four' || gameKind === 'fourteam' || gameKind === 'fourteam2';
+    const isFourTeam = () => gameKind === 'fourteam' || gameKind === 'fourteam2';
+    const isFourTeamTwo = () => gameKind === 'fourteam2';
     const currentGame = () => GAMES.find(g => g.id === gameKind);
     const colorName = c => (isFour() ? FOUR_SIDE[c] : SIDE[c]) || FOUR_SIDE[c] || SIDE[c];
-    const fourCanControl = color => localMode || (!!fourNetwork && fourNetwork.ready && fourNetwork.color === color);
+    const fourCanControl = color => localMode || (!!fourNetwork && fourNetwork.ready &&
+      (fourNetwork.colors || [fourNetwork.color]).includes(color));
     const fourNetworkStatus = () => {
       if (!fourNetwork) return '';
       if (fourNetwork.role === 'host') {
         const count = (fourNetwork.opened ? fourNetwork.opened.size : 0) + 1;
-        return ` · Code ${fourNetwork.code} (${count}/4)`;
+        const total = isFourTeamTwo() ? 2 : 4;
+        return ` · Code ${fourNetwork.code} (${count}/${total})`;
+      }
+      if (fourNetwork.role === 'spectator') return ' · Spectating';
+      if (fourNetwork.colors && fourNetwork.colors.length > 1) {
+        return ` · You are ${fourNetwork.colors.map(color => FOUR_SIDE[color]).join(' & ')}`;
       }
       return ` · You are ${FOUR_SIDE[fourNetwork.color]}`;
     };
     function broadcastFour(msg) {
       if (!fourNetwork || fourNetwork.role !== 'host') return;
       for (const c of fourNetwork.connections.values()) if (c && c.open) c.send(msg);
+      for (const c of fourNetwork.spectators || []) if (c && c.open) c.send(msg);
+    }
+    function broadcastFourSpectatorSnapshot() {
+      if (!fourNetwork || fourNetwork.role !== 'host' || !game) return;
+      const message = { type: 'four-spectator-state', snapshot: makeSpectatorSnapshot() };
+      for (const c of fourNetwork.spectators || []) if (c && c.open) c.send(message);
+    }
+    function rematchParticipantName(id) {
+      if (id === 'host') return isFourTeamTwo() ? 'Red & Yellow' : 'White';
+      if (id === 'guest') return isFourTeamTwo() ? 'Blue & Green' : 'Black';
+      return FOUR_SIDE[id] || id;
+    }
+    function showRematchStatus(requesters = [], required = []) {
+      rematchRequesters = [...requesters];
+      rematchRequired = [...required];
+      if (!requesters.length) {
+        rematchStatusEl.hidden = true;
+        rematchStatusEl.textContent = '';
+        return;
+      }
+      const names = requesters.map(rematchParticipantName);
+      rematchStatusEl.textContent = `${names.join(', ')} ${names.length === 1 ? 'wants' : 'want'} a rematch · ${requesters.length}/${required.length} ready`;
+      rematchStatusEl.hidden = false;
+    }
+    function updateRematchControls() {
+      const finished = phase === 'over' && !reviewing;
+      rematchBtnEl.hidden = !finished || spectatorMode;
+      if (!finished || spectatorMode) rematchStatusEl.hidden = true;
+      else if (rematchRequesters.length) showRematchStatus(rematchRequesters, rematchRequired);
     }
     const activeColor = () => (localMode && !isSimultaneous() ? game.turn : myColor);
     const gameInProgress = () => !!game && phase !== 'over';
@@ -1219,6 +1283,8 @@
         result: null,
         clock: createClock(controls, ['w', 'b'])
       };
+      showRematchStatus();
+      twoPlayerRematchRequests = new Set();
       phase = 'select';
       selected = null;
       pending = { w: null, b: null };
@@ -1392,6 +1458,7 @@
         clock: createClock(controls, FOUR_ORDER),
         history: []
       };
+      showRematchStatus();
       localMode = !fourNetwork;
       phase = 'select';
       selected = null;
@@ -1726,14 +1793,16 @@
     }
 
     function onFourSquareClick(r, c) {
+      if (spectatorMode) return;
       if (!game || (!localMode && !fourNetwork) || (fourNetwork && !fourNetwork.ready) ||
         (fourNetwork && fourNetwork.awaitingMove) || reviewing || phase !== 'select' || choosingPromotion) return;
-      const color = fourNetwork ? fourNetwork.color : game.turn;
+      const piece = game.board[r][c];
+      const selectedPiece = selected && game.board[selected.r][selected.c];
+      const color = selectedPiece ? selectedPiece.c : (piece ? piece.c : game.turn);
       if (!fourCanControl(color)) return;
-      if (fourNetwork && !isSimultaneous() && game.turn !== color) return;
+      if (!isSimultaneous() && game.turn !== color) return;
       if (isSimultaneous() && game.roundMoves[color]) return;
       if (fourVoid(r, c) || game.states[color] !== 'active') return;
-      const piece = game.board[r][c];
       if (selected) {
         const move = selected.moves.find(m => m.tr === r && m.tc === c);
         if (move) {
@@ -1762,7 +1831,8 @@
     function submitFourMove(move, promo, color = game.turn) {
       if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
         fourNetwork.awaitingMove = true;
-        send({ type: 'four-play', action: 'move', color: fourNetwork.color, move, promo });
+        fourNetwork.awaitingColor = color;
+        send({ type: 'four-play', action: 'move', color, move, promo });
         render();
         updateStatus();
         return;
@@ -1853,12 +1923,14 @@
     function applyFourMove(move, promo, zombie = false) {
       if (!game || phase === 'over') return;
       if (isSimultaneous() && !zombie) {
-        submitFourMove(move, promo, fourNetwork ? fourNetwork.color : game.turn);
+        const pieceColor = game.board[move.fr][move.fc] ? game.board[move.fr][move.fc].c : game.turn;
+        submitFourMove(move, promo, pieceColor);
         return;
       }
       if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
         fourNetwork.awaitingMove = true;
-        send({ type: 'four-play', action: 'move', color: fourNetwork.color, move, promo, zombie });
+        const color = game.board[move.fr][move.fc] ? game.board[move.fr][move.fc].c : fourNetwork.color;
+        send({ type: 'four-play', action: 'move', color, move, promo, zombie });
         render();
         return;
       }
@@ -2258,6 +2330,7 @@
       updateStatus();
       render();
       startClockForTurn();
+      broadcastFourSpectatorSnapshot();
     }
 
     function fourActiveCount() {
@@ -2364,6 +2437,7 @@
       updateStatus();
       render();
       startClockForTurn();
+      broadcastFourSpectatorSnapshot();
     }
 
     function fourFinishFfa() {
@@ -2580,7 +2654,7 @@
     function fourResign(colorOverride = null) {
       if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
         fourNetwork.awaitingMove = true;
-        send({ type: 'four-play', action: 'resign', color: fourNetwork.color });
+        send({ type: 'four-play', action: 'resign', color: game.turn });
         return;
       }
       if (!game || (!localMode && (!fourNetwork || fourNetwork.role !== 'host') && !applyingRemoteFourAction) || phase !== 'select') return;
@@ -2603,7 +2677,7 @@
     function fourClaim(color) {
       if (fourNetwork && fourNetwork.role === 'client' && !applyingRemoteFourAction) {
         fourNetwork.awaitingMove = true;
-        send({ type: 'four-play', action: 'claim', color: fourNetwork.color });
+        send({ type: 'four-play', action: 'claim', color: game.turn });
         return;
       }
       const others = FOUR_ORDER.filter(other => other !== color && game.states[other] === 'active');
@@ -2713,6 +2787,7 @@
 
       const total = game.history ? game.history.length - 1 : 0;
       reviewBtnEl.hidden = !(phase === 'over' && !entry && total > 0);
+      updateRematchControls();
       reviewBarEl.hidden = !entry;
       if (entry) {
         reviewLabelEl.textContent = `${entry.label} (${reviewIndex} / ${total})`;
@@ -2760,7 +2835,7 @@
     }
 
     function publishNetworkClock() {
-      if (!game || !game.clock || phase !== 'select') return;
+      if (!game || !game.clock || phase !== 'select' || spectatorMode) return;
       const message = {
         type: 'clock-sync',
         remaining: Object.fromEntries(Object.entries(game.clock.remaining)
@@ -2768,7 +2843,10 @@
         active: [...game.clock.active]
       };
       if (fourNetwork && fourNetwork.role === 'host') broadcastFour(message);
-      else if (!localMode && myColor === 'w' && conn && conn.open) send(message);
+      else if (!localMode && myColor === 'w') {
+        if (conn && conn.open) send(message);
+        broadcastTwoPlayerSpectators(message);
+      }
     }
 
     function applyNetworkClock(message) {
@@ -2877,6 +2955,10 @@
       if (!game || !game.clock) return;
       if (phase !== 'select') return;
       syncClock();
+      if (spectatorMode) {
+        updateClockDisplay();
+        return;
+      }
       if (isFour() && fourNetwork && fourNetwork.role === 'client') {
         updateClockDisplay();
         return;
@@ -2911,7 +2993,11 @@
           fourMakeZombie(color, `${FOUR_SIDE[color]} ran out of time.`);
           return;
         }
-        if (!localMode && myColor === 'w' && conn && conn.open) send({ type: 'timeout', color });
+        if (!localMode && myColor === 'w') {
+          const message = { type: 'timeout', color };
+          if (conn && conn.open) send(message);
+          broadcastTwoPlayerSpectators(message);
+        }
         finishNetworkTimeout(color);
       } finally {
         timingOut = false;
@@ -3369,6 +3455,10 @@
 
     function updateStatus() {
       if (!game) return;
+      if (spectatorMode && !isFour()) {
+        setStatus(phase === 'over' ? `Spectating · ${game.result}` : `Spectating · ${SIDE[game.turn]} to move`);
+        return;
+      }
       if (isFour()) {
         if (fourNetwork && !fourNetwork.ready) {
           const who = 'Waiting for players';
@@ -3383,8 +3473,9 @@
           if (isSimultaneous()) {
             const players = fourSyncPlayers();
             const readyPlayers = players.filter(color => game.roundMoves[color]);
-            if (fourNetwork && fourNetwork.role === 'client' && fourNetwork.awaitingMove && !readyPlayers.includes(fourNetwork.color)) {
-              readyPlayers.push(fourNetwork.color);
+            if (fourNetwork && fourNetwork.role === 'client' && fourNetwork.awaitingMove &&
+              fourNetwork.awaitingColor && !readyPlayers.includes(fourNetwork.awaitingColor)) {
+              readyPlayers.push(fourNetwork.awaitingColor);
             }
             const ready = readyPlayers.length;
             if (fourNetwork) {
@@ -3446,6 +3537,7 @@
         onFourSquareClick(r, c);
         return;
       }
+      if (spectatorMode) return;
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
       const darkPlayer = isSimultaneous() ? myColor : game.turn;
       if (isDark() && localMode && darkView !== darkPlayer) return;
@@ -3500,6 +3592,10 @@
       if (!isSimultaneous()) {
         applyStandardMove(chosen);
         send({ type: 'move', move: chosen });
+        if (!localMode && myColor === 'w') {
+          broadcastTwoPlayerSpectators({ type: 'move', move: chosen });
+          broadcastTwoPlayerSnapshot();
+        }
         return;
       }
       pending[myColor] = chosen;
@@ -3521,6 +3617,7 @@
         return;
       }
       send({ type: 'move', move: chosen });
+      if (!localMode && myColor === 'w') broadcastTwoPlayerSpectators({ type: 'move', move: chosen });
       if (pending[opponent(myColor)]) {
         resolveTurn();
       } else {
@@ -3534,9 +3631,14 @@
     function receiveMove(move) {
       if (!isSimultaneous()) {
         applyStandardMove(move, true);
+        if (!localMode && myColor === 'w') {
+          broadcastTwoPlayerSpectators({ type: 'move', move });
+          broadcastTwoPlayerSnapshot();
+        }
         return;
       }
       pending[opponent(myColor)] = move;
+      if (!localMode && myColor === 'w') broadcastTwoPlayerSpectators({ type: 'move', move });
       if (phase === 'select' && pending[myColor]) resolveTurn();
       else {
         updateStatus();
@@ -3798,6 +3900,7 @@
       render();
       if (phase === 'select' && isDark() && localMode) beginHandoff();
       else startClockForTurn();
+      if (!localMode && myColor === 'w') broadcastTwoPlayerSnapshot();
       if (phase === 'select' && pending.w && pending.b) resolveTurn();
     }
 
@@ -3857,7 +3960,7 @@
       const board = entry ? entry.board : game.board;
       const captured = entry ? entry.captured : game.captured;
       const lastMoves = entry ? entry.lastMoves : game.lastMoves;
-      const visible = dark && !entry ? visibleSquares(localMode ? darkView : myColor) : null;
+      const visible = dark && !entry && !spectatorMode ? visibleSquares(localMode ? darkView : myColor) : null;
       const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(board, c)).map(c => findKing(board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
@@ -3915,6 +4018,7 @@
       }
       const total = game.history ? game.history.length - 1 : 0;
       reviewBtnEl.hidden = !(phase === 'over' && !entry && total > 0);
+      updateRematchControls();
       reviewBarEl.hidden = !entry;
       if (entry) {
         reviewLabelEl.textContent = `${entry.label} (${reviewIndex} / ${total})`;
@@ -3928,12 +4032,185 @@
       if (conn && conn.open) conn.send(msg);
     }
 
+    function networkCopy(value) {
+      return JSON.parse(JSON.stringify(value, (_key, item) =>
+        item === Infinity ? { __syncChessInfinity: true } : item));
+    }
+
+    function restoreNetworkCopy(value) {
+      if (!value || typeof value !== 'object') return value;
+      if (value.__syncChessInfinity === true) return Infinity;
+      for (const key of Object.keys(value)) value[key] = restoreNetworkCopy(value[key]);
+      return value;
+    }
+
+    function makeSpectatorSnapshot() {
+      return {
+        kind: gameKind, simultaneous: isSimultaneous(), phase,
+        game: networkCopy(game), pending: networkCopy(pending)
+      };
+    }
+
+    function applySpectatorSnapshot(snapshot) {
+      if (!snapshot || !snapshot.game) return;
+      setGameKind(GAMES.some(g => g.id === snapshot.kind) ? snapshot.kind : 'chess');
+      simultaneousMode = snapshot.simultaneous === true;
+      game = restoreNetworkCopy(snapshot.game);
+      if (game.clock) game.clock.last = Date.now();
+      pending = snapshot.pending ? restoreNetworkCopy(snapshot.pending) : { w: null, b: null };
+      phase = snapshot.phase || 'select';
+      animationToken++;
+      reviewing = false;
+      reviewIndex = 0;
+      showRematchStatus();
+      reviewBarEl.hidden = true;
+      localMode = false;
+      spectatorMode = true;
+      myColor = 'w';
+      selected = null;
+      if (isFour()) {
+        fourNetwork = { role: 'spectator', ready: true, colors: [], color: null, awaitingMove: false };
+        newFourNetworkView();
+      } else {
+        fourNetwork = null;
+        panelEl.hidden = false;
+        updateStatus();
+        render();
+      }
+    }
+
+    function applySpectatorMove(move) {
+      if (!game || !spectatorMode || !move) return;
+      if (!isSimultaneous()) {
+        applyStandardMove(move, true);
+        return;
+      }
+      const piece = game.board[move.fr][move.fc];
+      if (!piece) return;
+      pending[piece.c] = move;
+      if (pending.w && pending.b) resolveTurn();
+      else {
+        updateStatus();
+        render();
+        startClockForTurn();
+      }
+    }
+
+    function newFourNetworkView() {
+      // The supplied snapshot is already the authoritative position; render it
+      // directly instead of replacing it with a fresh starting board.
+      panelEl.hidden = false;
+      updateStatus();
+      render();
+    }
+
+    function broadcastTwoPlayerSpectators(message) {
+      for (const c of hostedSpectators) if (c && c.open) c.send(message);
+    }
+
+    function broadcastTwoPlayerSnapshot() {
+      if (hostedSpectators.size && game) {
+        broadcastTwoPlayerSpectators({ type: 'spectator-state', snapshot: makeSpectatorSnapshot() });
+      }
+    }
+
+    function offerSpectatorConnection(c, fourNetworkHost = false) {
+      c.on('open', () => c.send({ type: 'spectator-offer' }));
+      c.on('data', msg => {
+        if (!msg || msg.type !== 'spectator-accept') return;
+        if (fourNetworkHost) {
+          const network = fourNetwork;
+          if (!network || network.role !== 'host' || !network.allowSpectators) return c.close();
+          network.spectators.add(c);
+          c.send({ type: 'four-spectator-start', snapshot: makeSpectatorSnapshot() });
+        } else {
+          if (!hostAllowsSpectators) return c.close();
+          hostedSpectators.add(c);
+          c.send({ type: 'spectator-start', snapshot: makeSpectatorSnapshot() });
+        }
+      });
+      c.on('close', () => {
+        hostedSpectators.delete(c);
+        if (fourNetwork && fourNetwork.spectators) fourNetwork.spectators.delete(c);
+      });
+    }
+
+    function restartTwoPlayerRematch() {
+      const controls = game.clock.controls;
+      const message = { type: 'rematch-start', kind: gameKind, controls, simultaneous: isSimultaneous() };
+      twoPlayerRematchRequests = new Set();
+      send(message);
+      newGame(controls);
+      broadcastTwoPlayerSnapshot();
+    }
+
+    function registerTwoPlayerRematchRequest(player) {
+      if (!game || phase !== 'over' || !conn) return;
+      twoPlayerRematchRequests.add(player);
+      const requesters = [...twoPlayerRematchRequests];
+      const required = ['host', 'guest'];
+      const status = { type: 'rematch-status', requesters, required };
+      if (conn.open) send(status);
+      broadcastTwoPlayerSpectators(status);
+      showRematchStatus(requesters, required);
+      if (required.every(id => twoPlayerRematchRequests.has(id))) restartTwoPlayerRematch();
+    }
+
+    function restartFourRematch() {
+      const network = fourNetwork;
+      const controls = game.clock.controls;
+      const message = {
+        type: 'four-rematch-start', kind: gameKind, controls,
+        simultaneous: isSimultaneous()
+      };
+      network.rematchRequests = new Set();
+      broadcastFour(message);
+      newFourGame(controls);
+      broadcastFourSpectatorSnapshot();
+    }
+
+    function registerFourRematchRequest(player) {
+      const network = fourNetwork;
+      if (!network || network.role !== 'host' || !game || phase !== 'over' || !player) return;
+      network.rematchRequests.add(player);
+      const requesters = [...network.rematchRequests];
+      const required = network.rematchPlayers;
+      broadcastFour({ type: 'rematch-status', requesters, required });
+      showRematchStatus(requesters, required);
+      if (required.every(id => network.rematchRequests.has(id))) restartFourRematch();
+    }
+
+    function requestRematch() {
+      if (!game || phase !== 'over' || spectatorMode) return;
+      if (localMode) {
+        const controls = game.clock.controls;
+        if (isFour()) newFourGame(controls);
+        else newGame(controls);
+        return;
+      }
+      if (fourNetwork) {
+        if (fourNetwork.role === 'host') {
+          registerFourRematchRequest(isFourTeamTwo() ? 'host' : 'r');
+        } else if (fourNetwork.role === 'client') {
+          showRematchStatus([isFourTeamTwo() ? 'guest' : fourNetwork.color], isFourTeamTwo() ? ['host', 'guest'] : FOUR_ORDER);
+          send({ type: 'rematch-request' });
+        }
+        return;
+      }
+      if (myColor === 'w') registerTwoPlayerRematchRequest('host');
+      else {
+        showRematchStatus(['guest'], ['host', 'guest']);
+        send({ type: 'rematch-request' });
+      }
+    }
+
     function leaveGame() {
       animationToken++;
       fourZombieToken++;
       localMode = false;
       const oldFourNetwork = fourNetwork;
       fourNetwork = null;
+      spectatorMode = false;
       clearTimeout(handoffTimer);
       handoffTimer = null;
       handoff = false;
@@ -3942,9 +4219,18 @@
       reviewIndex = 0;
       reviewBarEl.hidden = true;
       reviewBtnEl.hidden = true;
+      rematchBtnEl.hidden = true;
+      rematchStatusEl.hidden = true;
+      showRematchStatus();
       if (oldFourNetwork && oldFourNetwork.connections) {
         for (const c of oldFourNetwork.connections.values()) if (c && c.open) c.close();
       }
+      if (oldFourNetwork && oldFourNetwork.spectators) {
+        for (const c of oldFourNetwork.spectators) if (c && c.open) c.close();
+      }
+      for (const c of hostedSpectators) if (c && c.open) c.close();
+      hostedSpectators = new Set();
+      hostAllowsSpectators = false;
       if (conn) conn.close();
       if (peer) peer.destroy();
       conn = null;
@@ -3983,10 +4269,13 @@
     }
 
     function applyRemoteFourMessage(msg) {
-      if (!fourNetwork || fourNetwork.role !== 'client' || !game) return;
-      if (msg.type === 'four-ready') {
+      if (!fourNetwork || !['client', 'spectator'].includes(fourNetwork.role) || !game) return;
+      if (msg.type === 'four-spectator-state') {
+        applySpectatorSnapshot(msg.snapshot);
+      } else if (msg.type === 'four-ready') {
         fourNetwork.ready = true;
         fourNetwork.awaitingMove = false;
+        fourNetwork.awaitingColor = null;
         updateStatus();
         render();
         startClockForTurn();
@@ -3997,6 +4286,7 @@
         if (!fourNetwork) game.turn = msg.nextTurn;
         selected = null;
         fourNetwork.awaitingMove = false;
+        fourNetwork.awaitingColor = null;
         setLog([`${FOUR_SIDE[msg.color]} locked in a move.`]);
         updateStatus();
         render();
@@ -4062,40 +4352,50 @@
         handleFourDisconnect(color, c);
         return;
       }
+      if (msg.type === 'rematch-request') {
+        registerFourRematchRequest(fourNetwork.connectionPlayers.get(color));
+        return;
+      }
       if (msg.type !== 'four-play') return;
-      if (!fourNetwork.ready || fourNetwork.connections.get(color) !== c || msg.color !== color) {
+      const allowedColors = fourNetwork.connectionColors.get(color) || [color];
+      if (!fourNetwork.ready || fourNetwork.connections.get(color) !== c || !allowedColors.includes(msg.color)) {
         c.send({ type: 'four-reject', message: 'This seat is not ready.' });
         return;
       }
       if (msg.action === 'move') {
-        const valid = validateFourNetworkMove(color, msg.move, msg.promo);
+        const valid = validateFourNetworkMove(msg.color, msg.move, msg.promo);
         if (!valid) {
           c.send({ type: 'four-reject', message: 'That move is no longer legal.' });
           return;
         }
-        if (isSimultaneous()) submitFourMove(valid.move, valid.promo, color);
+        if (isSimultaneous()) submitFourMove(valid.move, valid.promo, msg.color);
         else applyFourMove(valid.move, valid.promo);
-      } else if (msg.action === 'resign' && game.turn === color) {
-        fourResign(color);
-      } else if (msg.action === 'claim' && game.turn === color && fourCanClaim() === color) {
-        fourClaim(color);
+      } else if (msg.action === 'resign' && game.turn === msg.color) {
+        fourResign(msg.color);
+      } else if (msg.action === 'claim' && game.turn === msg.color && fourCanClaim() === msg.color) {
+        fourClaim(msg.color);
       }
     }
 
     function handleFourDisconnect(color, c) {
       if (!fourNetwork || fourNetwork.role !== 'host') return;
+      const affectedColors = fourNetwork.connectionColors.get(color) || [color];
       fourNetwork.opened.delete(color);
       if (!fourNetwork.started) {
         if (fourNetwork.connections.get(color) === c) fourNetwork.connections.delete(color);
+        fourNetwork.connectionColors.delete(color);
+        fourNetwork.connectionPlayers.delete(color);
         updateStatus();
         render();
         return;
       }
-      if (fourNetwork.connections.get(color) !== c || game.states[color] !== 'active') return;
+      if (fourNetwork.connections.get(color) !== c || phase === 'over' ||
+        !affectedColors.some(seat => game.states[seat] === 'active')) return;
       if (isFourTeam()) {
-        const winner = fourTeam(color) === 'white' ? 'black' : 'white';
+        const affected = affectedColors.find(seat => game.states[seat] === 'active') || color;
+        const winner = fourTeam(affected) === 'white' ? 'black' : 'white';
         const result = `4P Teams - ${winner === 'white' ? 'White Team (Red & Yellow)' : 'Black Team (Blue & Green)'} Wins`;
-        const lines = [`${FOUR_SIDE[color]} disconnected.`];
+        const lines = [`${affectedColors.map(seat => FOUR_SIDE[seat]).join(' and ')} disconnected.`];
         broadcastFour({ type: 'four-end', result, lines, label: 'Disconnect' });
         fourFinish(result, lines, 'Disconnect');
       } else {
@@ -4110,26 +4410,61 @@
         lastHeard = Date.now();
         if (msg.type === 'bye') {
           opponentLeft(c);
+        } else if (msg.type === 'rematch-request' && !fourNetwork && myColor === 'w') {
+          registerTwoPlayerRematchRequest('guest');
         } else if (msg.type === 'clock-sync') {
-          applyNetworkClock(msg);
+          if (myColor === 'b' || spectatorMode) applyNetworkClock(msg);
         } else if (msg.type === 'timeout') {
-          finishNetworkTimeout(msg.color);
+          if (myColor === 'b' || spectatorMode) finishNetworkTimeout(msg.color);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
           newGame(msg.controls || null);
         } else if (msg.type === 'four-start') {
-          setGameKind(msg.kind === 'fourteam' ? 'fourteam' : 'four');
+          setGameKind(['four', 'fourteam', 'fourteam2'].includes(msg.kind) ? msg.kind : 'four');
           simultaneousMode = msg.simultaneous === true;
           fourNetwork = {
             role: 'client', color: FOUR_JOIN_ORDER.includes(msg.color) ? msg.color : 'y',
+            colors: Array.isArray(msg.colors) ? msg.colors : [FOUR_JOIN_ORDER.includes(msg.color) ? msg.color : 'y'],
             ready: !!msg.ready, openedCount: msg.openedCount || 2, awaitingMove: false
           };
+          newFourGame(msg.controls || null);
+        } else if (msg.type === 'spectator-offer') {
+          if (confirm('This game is full. Would you like to spectate?')) {
+            setStatus('Requesting spectator access...');
+            c.send({ type: 'spectator-accept' });
+          } else {
+            c.send({ type: 'spectator-decline' });
+            leaveGame();
+            setStatus('Game Is Full', true);
+          }
+        } else if (msg.type === 'spectator-start' || msg.type === 'spectator-state' || msg.type === 'four-spectator-start') {
+          applySpectatorSnapshot(msg.snapshot);
+        } else if (msg.type === 'spectator-move') {
+          applySpectatorMove(msg.move);
+        } else if (msg.type === 'rematch-status') {
+          if (myColor === 'b' || spectatorMode) showRematchStatus(msg.requesters, msg.required);
+        } else if (msg.type === 'rematch-start') {
+          if (myColor !== 'b' && !spectatorMode) return;
+          spectatorMode = false;
+          setGameKind(msg.kind);
+          simultaneousMode = msg.simultaneous === true;
+          newGame(msg.controls || null);
+        } else if (msg.type === 'four-rematch-start') {
+          if (!fourNetwork || !['client', 'spectator'].includes(fourNetwork.role)) return;
+          setGameKind(msg.kind);
+          simultaneousMode = msg.simultaneous === true;
+          if (fourNetwork) {
+            fourNetwork.ready = true;
+            fourNetwork.awaitingMove = false;
+            fourNetwork.rematchRequests = new Set();
+          }
           newFourGame(msg.controls || null);
         } else if (msg.type.startsWith('four-')) {
           applyRemoteFourMessage(msg);
         } else if (msg.type === 'move' && game) {
-          receiveMove(msg.move);
+          if (spectatorMode) applySpectatorMove(msg.move);
+          else receiveMove(msg.move);
         } else if (msg.type === 'full') {
           leaveGame();
           setStatus('That Game Is Already Full', true);
@@ -4143,6 +4478,9 @@
         broadcastFour({ type: 'ping' });
         return;
       }
+      if (hostAllowsSpectators) {
+        for (const c of hostedSpectators) if (c && c.open) c.send({ type: 'ping' });
+      }
       if (!conn || !conn.open) return;
       send({ type: 'ping' });
       if (game && Date.now() - lastHeard > 10000) opponentLeft(conn);
@@ -4153,12 +4491,17 @@
       broadcastFour({ type: 'bye' });
     });
 
-    function hostFourGame(controls, attempt = 0) {
+    function hostFourGame(controls, attempt = 0, allowSpectators = false) {
       leaveGame();
       localMode = false;
+      const teamTwoPlayer = gameKind === 'fourteam2';
+      const joinSeats = teamTwoPlayer ? ['b'] : FOUR_JOIN_ORDER;
       fourNetwork = {
-        role: 'host', color: 'r', code: randomCode(), controls, kind: gameKind,
-        connections: new Map(), opened: new Set(), ready: false, started: false
+        role: 'host', color: 'r', colors: teamTwoPlayer ? ['r', 'y'] : ['r'],
+        code: randomCode(), controls, kind: gameKind, allowSpectators,
+        connections: new Map(), connectionColors: new Map(), connectionPlayers: new Map(),
+        opened: new Set(), spectators: new Set(), ready: false, started: false,
+        rematchRequests: new Set(), rematchPlayers: teamTwoPlayer ? ['host', 'guest'] : FOUR_ORDER
       };
       const network = fourNetwork;
       newFourGame(controls);
@@ -4169,22 +4512,35 @@
         updateStatus();
       });
       p.on('connection', c => {
-        if (fourNetwork !== network || network.started) {
+        if (fourNetwork !== network) {
           c.on('open', () => {
             c.send({ type: 'full' });
             setTimeout(() => c.close(), 500);
           });
           return;
         }
-        const color = FOUR_JOIN_ORDER.find(seat => !network.connections.has(seat));
+        if (network.started) {
+          if (network.allowSpectators) offerSpectatorConnection(c, true);
+          else c.on('open', () => {
+            c.send({ type: 'full' });
+            setTimeout(() => c.close(), 500);
+          });
+          return;
+        }
+        const color = joinSeats.find(seat => !network.connections.has(seat));
         if (!color) {
-          c.on('open', () => {
+          if (network.allowSpectators) offerSpectatorConnection(c, true);
+          else c.on('open', () => {
             c.send({ type: 'full' });
             setTimeout(() => c.close(), 500);
           });
           return;
         }
+        const colors = teamTwoPlayer && color === 'b' ? ['b', 'g'] : [color];
+        const player = teamTwoPlayer ? 'guest' : color;
         network.connections.set(color, c);
+        network.connectionColors.set(color, colors);
+        network.connectionPlayers.set(color, player);
         c.on('data', msg => {
           if (msg.type === 'ping') return;
           handleFourHostMessage(color, c, msg);
@@ -4193,14 +4549,14 @@
         c.on('open', () => {
           if (fourNetwork !== network || network.connections.get(color) !== c) return;
           network.opened.add(color);
-          const becameReady = network.opened.size === FOUR_JOIN_ORDER.length;
+          const becameReady = network.opened.size === joinSeats.length;
           if (becameReady) {
             network.ready = true;
             network.started = true;
           }
           c.send({
             type: 'four-start', kind: network.kind, controls: network.controls,
-            simultaneous: isSimultaneous(), color, ready: network.ready,
+            simultaneous: isSimultaneous(), color, colors, ready: network.ready,
             openedCount: network.opened.size + 1
           });
           if (becameReady) broadcastFour({ type: 'four-ready' });
@@ -4211,14 +4567,16 @@
       });
       p.on('error', err => {
         if (peer !== p) return;
-        if (err.type === 'unavailable-id' && attempt < 3) hostFourGame(controls, attempt + 1);
+        if (err.type === 'unavailable-id' && attempt < 3) hostFourGame(controls, attempt + 1, allowSpectators);
         else if (!network.opened.size) setStatus('Could Not Create Game - Try Again', true);
       });
     }
 
-    function hostGame(attempt = 0, controls = null) {
+    function hostGame(attempt = 0, controls = null, allowSpectators = false) {
       leaveGame();
       myColor = 'w';
+      hostAllowsSpectators = allowSpectators;
+      hostedSpectators = new Set();
       const code = randomCode();
       setStatus('Creating Game...');
       const p = new Peer(PEER_PREFIX + code);
@@ -4229,7 +4587,8 @@
       });
       p.on('connection', c => {
         if (conn) {
-          c.on('open', () => {
+          if (hostAllowsSpectators) offerSpectatorConnection(c, false);
+          else c.on('open', () => {
             c.send({ type: 'full' });
             setTimeout(() => c.close(), 500);
           });
@@ -4243,7 +4602,7 @@
       });
       p.on('error', err => {
         if (peer !== p) return;
-        if (err.type === 'unavailable-id' && attempt < 3) hostGame(attempt + 1, controls);
+        if (err.type === 'unavailable-id' && attempt < 3) hostGame(attempt + 1, controls, allowSpectators);
         else if (!conn) setStatus('Could Not Create Game - Try Again', true);
       });
     }
@@ -4324,6 +4683,8 @@
       }
       timeTitleEl.textContent = 'Time Control';
       syncModeOptionEl.hidden = gameKind === 'sync';
+      spectatorsOptionEl.hidden = action !== 'host';
+      allowSpectatorsInputEl.checked = false;
       syncModeInputEl.checked = simultaneousMode;
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
@@ -4500,12 +4861,13 @@
     timeStartEl.addEventListener('click', () => {
       const action = pendingAction;
       const controls = collectTimeControls();
+      const allowSpectators = allowSpectatorsInputEl.checked;
       simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
-        if (isFour()) hostFourGame(controls);
-        else hostGame(0, controls);
+        if (isFour()) hostFourGame(controls, 0, allowSpectators);
+        else hostGame(0, controls, allowSpectators);
       } else {
         leaveGame();
         localMode = true;
@@ -4531,6 +4893,7 @@
     });
     handoffBtnEl.addEventListener('click', endHandoff);
     reviewBtnEl.addEventListener('click', enterReview);
+    rematchBtnEl.addEventListener('click', requestRematch);
     reviewFirstEl.addEventListener('click', () => reviewTo(0));
     reviewPrevEl.addEventListener('click', () => reviewTo(reviewIndex - 1));
     reviewNextEl.addEventListener('click', () => reviewTo(reviewIndex + 1));
