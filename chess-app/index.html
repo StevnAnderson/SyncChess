@@ -739,6 +739,27 @@
       width: min(100%, 480px);
     }
 
+    .captured-piece {
+      background: none;
+      border: 0;
+      border-radius: 5px;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      line-height: 1;
+      padding: 0 0.08em;
+    }
+
+    .captured-piece:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    .captured-piece.selected {
+      background: rgba(124, 92, 191, 0.55);
+      color: var(--text-main);
+    }
+
     .promotion {
       display: flex;
       gap: 0.5rem;
@@ -966,6 +987,15 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-crazyhouse" hidden>
+      <h2>How Crazyhouse Works</h2>
+      <ul>
+        <li>Pieces move, capture, and promote as in normal chess.</li>
+        <li>A captured piece joins the capturer&rsquo;s reserve. On your turn, click a reserve piece, then an empty square to drop it as your color.</li>
+        <li>Pawns cannot be dropped on the first or eighth rank. A drop cannot leave your king in check.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-dark" hidden>
       <h2>How Dark Chess Works</h2>
       <ul>
@@ -1097,6 +1127,7 @@
       { id: 'fourteam2', name: '4P Teams (2P)' },
       { id: 'atomic', name: 'Atomic' },
       { id: 'chess', name: 'Chess' },
+      { id: 'crazyhouse', name: 'Crazyhouse' },
       { id: 'dark', name: 'Dark Chess' },
       { id: 'kinghill', name: 'King of the Hill' },
       { id: 'memory', name: 'Memory Chess' },
@@ -1121,6 +1152,7 @@
       fourteam2: document.getElementById('rules-fourteam2'),
       atomic: document.getElementById('rules-atomic'),
       chess: document.getElementById('rules-chess'),
+      crazyhouse: document.getElementById('rules-crazyhouse'),
       memory: document.getElementById('rules-memory'),
       dark: document.getElementById('rules-dark'),
       kinghill: document.getElementById('rules-kinghill'),
@@ -1174,6 +1206,7 @@
     let simultaneousMode = false;
     let phase = null;
     let selected = null;
+    let selectedDrop = null;
     let pending = { w: null, b: null };
     let choosingPromotion = false;
     let animationToken = 0;
@@ -1207,9 +1240,10 @@
     const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1];
     const squareName = ([r, c]) => FILES[c] + (8 - r);
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
-    const isSimultaneous = () => gameKind === 'sync' || simultaneousMode;
+    const isSimultaneous = () => gameKind === 'sync' || (gameKind !== 'crazyhouse' && simultaneousMode);
     const isDark = () => gameKind === 'dark';
     const isMemory = () => gameKind === 'memory';
+    const isCrazyhouse = () => gameKind === 'crazyhouse';
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
@@ -1299,6 +1333,7 @@
       twoPlayerRematchRequests = new Set();
       phase = 'select';
       selected = null;
+      selectedDrop = null;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -1474,6 +1509,7 @@
       localMode = !fourNetwork;
       phase = 'select';
       selected = null;
+      selectedDrop = null;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -3212,6 +3248,33 @@
       });
     }
 
+    function crazyhouseDropAllowed(board, color, type, r, c) {
+      if (!isCrazyhouse() || !inBounds(r, c) || board[r][c]) return false;
+      if (!['p', 'n', 'b', 'r', 'q'].includes(type)) return false;
+      if (type === 'p' && (r === 0 || r === 7)) return false;
+      const next = board.map(row => row.slice());
+      next[r][c] = { t: type, c: color, id: -1, delayed: false };
+      return !inCheck(next, color);
+    }
+
+    function crazyhouseDropSquares(color, type, board = game.board) {
+      const squares = [];
+      if (!isCrazyhouse() || !game.captured[color].some(piece => piece.t === type)) return squares;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (crazyhouseDropAllowed(board, color, type, r, c)) squares.push([r, c]);
+        }
+      }
+      return squares;
+    }
+
+    function storeCapturedPiece(color, piece) {
+      const reserve = isCrazyhouse() && piece.promoted
+        ? { ...piece, t: 'p', promoted: false }
+        : piece;
+      game.captured[color].push(reserve);
+    }
+
     // Dark Chess: everything your own pieces could move to is visible, the rest is fog.
     function visibleSquares(color) {
       const seen = new Set();
@@ -3233,6 +3296,10 @@
           if (p && p.c === color && legalMoves(g, r, c).length) return true;
         }
       }
+      if (isCrazyhouse()) {
+        const types = new Set(game.captured[color].map(piece => piece.t));
+        for (const type of types) if (crazyhouseDropSquares(color, type, g.board).length) return true;
+      }
       return false;
     }
 
@@ -3252,6 +3319,10 @@
     }
 
     function moveText(board, move) {
+      if (move.drop) {
+        const letter = move.dropType === 'p' ? '' : move.dropType.toUpperCase();
+        return `${letter}@${squareName([move.tr, move.tc])}`;
+      }
       const piece = board[move.fr][move.fc];
       if (move.castle) return move.castle === 'K' ? 'O-O' : 'O-O-O';
       const letter = piece.t === 'p' ? '' : (piece.t === 'n' ? 'N' : piece.t.toUpperCase());
@@ -3560,6 +3631,19 @@
       }
       const actor = activeColor();
       const piece = game.board[r][c];
+      if (isCrazyhouse() && selectedDrop) {
+        const reserve = game.captured[actor].find(item => item.id === selectedDrop.id);
+        if (reserve && crazyhouseDropAllowed(game.board, actor, reserve.t, r, c)) {
+          const dropMove = {
+            drop: true, dropColor: actor, dropType: reserve.t, dropId: reserve.id, tr: r, tc: c
+          };
+          selectedDrop = null;
+          lockIn(dropMove, null);
+        } else {
+          setStatus('That piece cannot be dropped there.', true);
+        }
+        return;
+      }
       if (selected) {
         const move = selected.moves.find(m => m.tr === r && m.tc === c);
         if (move) {
@@ -3578,6 +3662,21 @@
         selected = { r, c, moves: legalMoves(game, r, c) };
       } else {
         selected = null;
+      }
+      render();
+    }
+
+    function chooseCrazyhouseReserve(color, id) {
+      if (!isCrazyhouse() || !game || spectatorMode || reviewing || phase !== 'select' || choosingPromotion) return;
+      const actor = activeColor();
+      if (color !== actor || game.turn !== actor) return;
+      const piece = game.captured[color].find(item => item.id === id);
+      if (!piece) return;
+      if (selectedDrop && selectedDrop.id === id && selectedDrop.color === color) selectedDrop = null;
+      else {
+        selectedDrop = { color, id };
+        selected = null;
+        setStatus(`${SIDE[color]} selected a ${NAMES[piece.t]} to drop.`);
       }
       render();
     }
@@ -3689,8 +3788,48 @@
       return `${ply % 2 === 1 ? number + '.' : number + '...'} ${moveText(before, move)}`;
     }
 
+    function applyCrazyhouseDropMove(move) {
+      if (!game || phase !== 'select' || !isCrazyhouse()) return;
+      const color = move.dropColor;
+      if (!['w', 'b'].includes(color) || game.turn !== color ||
+        !inBounds(move.tr, move.tc) || !crazyhouseDropAllowed(game.board, color, move.dropType, move.tr, move.tc)) return;
+      const inventory = game.captured[color];
+      const index = inventory.findIndex(piece => piece.id === move.dropId && piece.t === move.dropType);
+      if (index < 0) return;
+
+      syncClock();
+      const before = cloneBoard(game.board);
+      const reserve = inventory.splice(index, 1)[0];
+      game.board[move.tr][move.tc] = {
+        ...reserve, c: color, delayed: false, promoted: false
+      };
+      game.enPassant = [];
+      game.lastMoves = [{ ...move }];
+      game.turn = opponent(color);
+      addIncrement(color);
+      selected = null;
+      selectedDrop = null;
+      const lines = [`${SIDE[color]} dropped a ${NAMES[move.dropType]} on ${squareName([move.tr, move.tc])}.`];
+      const checked = inCheck(game.board, game.turn);
+      const outcome = positionResult(game.board);
+      if (outcome) game.result = outcome;
+      phase = game.result ? 'over' : 'select';
+      if (checked && !game.result) lines.push(`${SIDE[game.turn]} is in check.`);
+      if (game.result) lines.push(game.result);
+      pushHistory(lines, moveLabel(before, move));
+      setLog(lines);
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
     function applyStandardMove(move, incoming = false) {
+      if (move.drop) {
+        applyCrazyhouseDropMove(move);
+        return;
+      }
+      selectedDrop = null;
       syncClock();
       const before = game.board;
       const moving = before[move.fr][move.fc];
@@ -3702,11 +3841,11 @@
       const target = before[move.tr][move.tc];
       const enPassantVictim = move.enPassant ? before[move.victim[0]][move.victim[1]] : null;
       if (target) {
-        if (!atomic) game.captured[opponent(target.c)].push(target);
+        if (!atomic) storeCapturedPiece(opponent(target.c), target);
         if (!quiet) lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
       }
       if (enPassantVictim) {
-        if (!atomic) game.captured[opponent(enPassantVictim.c)].push(enPassantVictim);
+        if (!atomic) storeCapturedPiece(opponent(enPassantVictim.c), enPassantVictim);
         if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn captured ${SIDE[enPassantVictim.c]}'s Pawn en passant.`);
       }
       if (move.castle && !quiet) {
@@ -3716,6 +3855,7 @@
       game.board = applySingleMove(before, move);
       if (fromType === 'p' && (move.tr === 0 || move.tr === 7)) {
         moving.t = move.promo || 'q';
+        if (isCrazyhouse()) moving.promoted = true;
         if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn promoted to a ${NAMES[moving.t]}.`);
       }
 
@@ -3868,7 +4008,7 @@
       for (const [key, row, rookCol] of [['wK', 7, 7], ['wQ', 7, 0], ['bK', 0, 7], ['bQ', 0, 0]]) {
         game.castling[key] = game.castling[key] && sameId(row, 4) && sameId(row, rookCol);
       }
-      for (const p of result.captured) game.captured[opponent(p.c)].push(p);
+      for (const p of result.captured) storeCapturedPiece(opponent(p.c), p);
       game.board = board;
       game.enPassant = result.enPassant;
 
@@ -3976,6 +4116,12 @@
       const visible = dark && !entry && !spectatorMode
         ? (hideDarkSyncAnimation ? new Set() : visibleSquares(localMode ? darkView : myColor))
         : null;
+      const selectedReserve = isCrazyhouse() && selectedDrop
+        ? game.captured[selectedDrop.color].find(piece => piece.id === selectedDrop.id)
+        : null;
+      const dropTargets = selectedReserve && !entry && phase === 'select'
+        ? new Set(crazyhouseDropSquares(selectedDrop.color, selectedReserve.t).map(([r, c]) => r * 8 + c))
+        : new Set();
       const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(board, c)).map(c => findKing(board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
@@ -3989,6 +4135,7 @@
           if (fogged) sq.classList.add('fog');
           if ((!dark || entry) && lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+          if (dropTargets.has(r * 8 + c)) sq.classList.add('target');
           if (checked.some(k => k[0] === r && k[1] === c)) sq.classList.add('in-check');
           const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
           if (target) {
@@ -4027,9 +4174,29 @@
       }
       const shown = { b: flip ? 'w' : 'b', w: flip ? 'b' : 'w' };
       for (const color of ['w', 'b']) {
-        capturedEl[color].textContent = dark && !entry
-          ? ''
-          : captured[shown[color]].map(p => isMemory() && !entry ? '\u25CF' : GLYPHS[p.c][p.t]).join('');
+        const inventoryColor = shown[color];
+        if (isCrazyhouse() && !dark) {
+          capturedEl[color].innerHTML = '';
+          for (const reserve of captured[inventoryColor]) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'captured-piece';
+            button.textContent = GLYPHS[reserve.c][reserve.t];
+            button.setAttribute('aria-label', `${SIDE[inventoryColor]} reserve ${NAMES[reserve.t]}`);
+            const canSelect = !entry && phase === 'select' && !spectatorMode &&
+              game.turn === (localMode ? game.turn : myColor) && inventoryColor === (localMode ? game.turn : myColor);
+            button.disabled = !canSelect;
+            if (selectedDrop && selectedDrop.color === inventoryColor && selectedDrop.id === reserve.id) {
+              button.classList.add('selected');
+            }
+            button.addEventListener('click', () => chooseCrazyhouseReserve(inventoryColor, reserve.id));
+            capturedEl[color].appendChild(button);
+          }
+        } else {
+          capturedEl[color].textContent = dark && !entry
+            ? ''
+            : captured[inventoryColor].map(p => isMemory() && !entry ? '\u25CF' : GLYPHS[p.c][p.t]).join('');
+        }
       }
       const total = game.history ? game.history.length - 1 : 0;
       reviewBtnEl.hidden = !(phase === 'over' && !entry && total > 0);
@@ -4697,10 +4864,10 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync';
+      syncModeOptionEl.hidden = gameKind === 'sync' || isCrazyhouse();
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
-      syncModeInputEl.checked = simultaneousMode;
+      syncModeInputEl.checked = !isCrazyhouse() && simultaneousMode;
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
         : 'Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.';
@@ -4877,7 +5044,7 @@
       const action = pendingAction;
       const controls = collectTimeControls();
       const allowSpectators = allowSpectatorsInputEl.checked;
-      simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
+      simultaneousMode = gameKind === 'sync' || (gameKind !== 'crazyhouse' && syncModeInputEl.checked);
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
