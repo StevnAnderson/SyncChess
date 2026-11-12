@@ -39,6 +39,11 @@
       gap: 0.35rem;
     }
 
+    .random-game-btn {
+      display: block;
+      margin: 0.35rem auto 0;
+    }
+
     .game-arrow {
       background: none;
       border: 2px solid transparent;
@@ -870,6 +875,7 @@
       <button class="game-side-label next" id="game-next-name" type="button" aria-label="Next game"></button>
       <ul class="game-menu" id="game-menu" role="listbox" aria-label="Games" hidden></ul>
     </div>
+    <button class="btn random-game-btn" id="random-game-btn" type="button">Random</button>
   </header>
 
   <div class="container">
@@ -4387,6 +4393,12 @@
       selectGame(GAMES[(i + dir + GAMES.length) % GAMES.length].id);
     }
 
+    function selectRandomGame() {
+      const options = GAMES.filter(g => g.id !== gameKind);
+      const choice = options[Math.floor(Math.random() * options.length)];
+      selectGame(choice.id);
+    }
+
     titleEl.addEventListener('click', e => {
       e.stopPropagation();
       if (menuEl.hidden) openMenu();
@@ -4394,6 +4406,7 @@
     });
     document.getElementById('game-prev').addEventListener('click', () => cycleGame(-1));
     document.getElementById('game-next').addEventListener('click', () => cycleGame(1));
+    document.getElementById('random-game-btn').addEventListener('click', selectRandomGame);
     prevNameEl.addEventListener('click', () => cycleGame(-1));
     nextNameEl.addEventListener('click', () => cycleGame(1));
     document.addEventListener('click', e => {
