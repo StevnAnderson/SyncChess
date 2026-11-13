@@ -1305,6 +1305,33 @@
     const fourIndex = c => FOUR_ORDER.indexOf(c);
     const nextFourColor = c => FOUR_ORDER[(fourIndex(c) + 1) % FOUR_ORDER.length];
 
+    function positionKey(g = game, board = g.board) {
+      const pieces = board.map(row => row.map(piece => piece
+        ? `${piece.c}${piece.t}${piece.promoted ? '+' : ''}${piece.delayed ? '!' : ''}`
+        : '.').join('')).join('/');
+      if (isFour()) {
+        return JSON.stringify([pieces, g.turn, g.states, g.castling, g.enPassant]);
+      }
+      const turn = isSimultaneous() ? 'sync' : g.turn;
+      const reserves = isCrazyhouse()
+        ? ['w', 'b'].map(color => g.captured[color].map(piece => piece.t).sort().join(''))
+        : null;
+      return JSON.stringify([pieces, turn, g.castling, g.enPassant, g.checks, reserves]);
+    }
+
+    function recordPosition() {
+      const key = positionKey();
+      game.repetitionKeys ||= [];
+      game.repetitionKeys.push(key);
+      return game.repetitionKeys.filter(position => position === key).length;
+    }
+
+    function isThreefoldRepetition(board = game.board) {
+      const key = positionKey(game, board);
+      const previous = game.repetitionKeys || [];
+      return previous.filter(position => position === key).length + 1 >= 3;
+    }
+
     function newGame(controls = null) {
       if (isFour()) {
         newFourGame(controls);
@@ -1367,6 +1394,7 @@
         reviewLines: [intro],
         label: 'Starting Position'
       }];
+      game.repetitionKeys = [positionKey()];
       updateStatus();
       render();
       startClockForTurn();
@@ -1540,6 +1568,7 @@
         reviewLines: [intro],
         label: 'Starting Position'
       });
+      game.repetitionKeys = [positionKey()];
       updateStatus();
       render();
       startClockForTurn();
@@ -2053,7 +2082,7 @@
 
       pushFourHistory(lines, fourMoveLabel(before, move));
       setLog(lines);
-      fourAdvanceTurn();
+      fourAdvanceTurn(true);
     }
 
     function buildFourPath(move, piece) {
@@ -2367,13 +2396,14 @@
         fourFinishFfa();
         return;
       }
+      game.turn = fourSyncPlayers()[0] || FOUR_ORDER.find(color => game.states[color] === 'zombie') || 'r';
+      recordPosition();
       const draw = fourDrawDue();
       if (draw) {
         setLog(lines);
         fourHandleDraw(draw);
         return;
       }
-      game.turn = fourSyncPlayers()[0] || FOUR_ORDER.find(color => game.states[color] === 'zombie') || 'r';
       setLog(lines);
       updateStatus();
       render();
@@ -2396,6 +2426,7 @@
     }
 
     function fourDrawDue() {
+      if (game.repetitionKeys && game.repetitionKeys.filter(key => key === positionKey()).length >= 3) return 'repetition';
       if (game.idle >= 100) return 'fifty';
       const active = FOUR_ORDER.filter(color => game.states[color] === 'active');
       const material = active.some(color => {
@@ -2410,7 +2441,7 @@
       return material ? null : 'material';
     }
 
-    function fourAdvanceTurn() {
+    function fourAdvanceTurn(completedMove = false) {
       if (!game || phase === 'over') return;
       const active = FOUR_ORDER.filter(color => game.states[color] === 'active');
       if (isFourTeam()) {
@@ -2439,6 +2470,10 @@
       // checkmated on arrival and never actually moves.
       fourPruneEnPassant(next);
       selected = null;
+      if (completedMove && recordPosition() >= 3) {
+        fourHandleDraw('repetition');
+        return;
+      }
       fourEvaluateTurn();
     }
 
@@ -2602,7 +2637,9 @@
 
     function fourHandleDraw(kind) {
       if (isFourTeam()) {
-        fourFinish('4P Teams - Draw', [kind === 'fifty' ? 'Draw by the 50-move rule.' : 'Draw by insufficient material.'], 'Draw');
+        const reason = kind === 'fifty' ? 'Draw by the 50-move rule.'
+          : kind === 'repetition' ? 'Draw by threefold repetition.' : 'Draw by insufficient material.';
+        fourFinish('4P Teams - Draw', [reason], 'Draw');
         return;
       }
       const lines = [];
@@ -2611,7 +2648,8 @@
         game.scores[color] += 10;
         lines.push(`${FOUR_SIDE[color]} receives 10 points for the draw.`);
       }
-      lines.push(kind === 'fifty' ? 'Draw by the 50-move rule.' : 'Draw by insufficient material.');
+      lines.push(kind === 'fifty' ? 'Draw by the 50-move rule.'
+        : kind === 'repetition' ? 'Draw by threefold repetition.' : 'Draw by insufficient material.');
       pushFourHistory(lines, 'Draw');
       setLog(lines);
       fourFinishFfa();
@@ -3763,6 +3801,13 @@
       const captured = [];
       const capturers = new Set();
       const enPassant = [];
+      const dropMoves = selections.filter(selection => selection.drop);
+      const destinations = new Map();
+      for (const move of dropMoves) {
+        const key = `${move.tr},${move.tc}`;
+        destinations.set(key, (destinations.get(key) || 0) + 1);
+      }
+      const contestedDrops = new Set([...destinations].filter(([, count]) => count > 1).map(([key]) => key));
 
       // Resolve ordinary moves from the shared starting position, then place drops.
       // A drop is instantaneous, so it cannot intercept a piece already travelling.
@@ -3797,10 +3842,18 @@
         });
       }
 
-      for (const move of selections.filter(selection => selection.drop)) {
+      for (const move of dropMoves) {
         const inventory = g.captured[move.dropColor];
         const index = inventory.findIndex(piece => piece.id === move.dropId && piece.t === move.dropType);
-        if (index < 0 || board[move.tr][move.tc] || !crazyhouseDropAllowed(board, move.dropColor, move.dropType, move.tr, move.tc)) {
+        const destinationKey = `${move.tr},${move.tc}`;
+        if (contestedDrops.has(destinationKey)) {
+          const message = `Both drops on ${squareName([move.tr, move.tc])} were cancelled.`;
+          if (!events.includes(message)) events.push(message);
+          continue;
+        }
+        // Validate each drop against the shared starting position. A simultaneous
+        // opponent drop may give check, but cannot invalidate a move already chosen.
+        if (index < 0 || board[move.tr][move.tc] || !crazyhouseDropAllowed(g.board, move.dropColor, move.dropType, move.tr, move.tc)) {
           events.push(`${SIDE[move.dropColor]}'s drop on ${squareName([move.tr, move.tc])} was blocked.`);
           continue;
         }
@@ -3834,6 +3887,7 @@
         reviewLines,
         label
       });
+      recordPosition();
     }
 
     function moveLabel(before, move) {
@@ -4043,6 +4097,7 @@
         if (!kings.w && !kings.b) return atomic ? 'Both Kings Exploded - Draw' : 'Both Kings Fell - Draw';
         return `${atomic ? 'King Exploded' : 'King Captured'} - ${!kings.w ? 'Black' : 'White'} Wins`;
       }
+      if (isThreefoldRepetition(board)) return 'Threefold Repetition - Draw';
       if (isDark()) return null;
       if (board.flat().every(p => !p || p.t === 'k')) return 'Only Kings Left - Stalemate';
       const g = { ...game, board };
