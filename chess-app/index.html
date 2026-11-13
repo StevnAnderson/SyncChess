@@ -683,8 +683,29 @@
       gap: 0.5rem;
     }
 
+    .time-fields.with-bots .time-row {
+      grid-template-columns: 1fr 2.5rem 4.5rem 4.5rem;
+    }
+
     .time-row label {
       font-weight: 600;
+    }
+
+    .time-row .time-bot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 400;
+      cursor: pointer;
+    }
+
+    .time-row .time-bot input {
+      width: 1.05rem;
+      height: 1.05rem;
+      padding: 0;
+      margin: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
     }
 
     .time-row input {
@@ -1267,6 +1288,10 @@
     let lastTimeControl = null;
     let fourZombieToken = 0;
     let timingOut = false;
+    let botSeats = new Set();
+    let botMoveTimer = null;
+    let botToken = 0;
+    const BOT_MOVE_DELAY_MS = 550;
 
     const makePiece = (t, c) => ({ t, c, id: nextId++, delayed: false });
     const inBounds = (r, c, size = 8) => r >= 0 && r < size && c >= 0 && c < size;
@@ -1282,6 +1307,35 @@
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
+    const botsAllowed = () => localMode && gameKind === 'chess';
+    const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
+
+    function clearBotMove() {
+      if (botMoveTimer) {
+        clearTimeout(botMoveTimer);
+        botMoveTimer = null;
+      }
+      botToken++;
+    }
+
+    // Local pass & play bots: wait a moment, then play for any checked color.
+    function scheduleBotMove() {
+      if (botMoveTimer) {
+        clearTimeout(botMoveTimer);
+        botMoveTimer = null;
+      }
+      botToken++;
+      if (!botActive() || !game || phase !== 'select' || !botSeats.has(game.turn)) return;
+      const token = botToken;
+      botMoveTimer = setTimeout(() => {
+        botMoveTimer = null;
+        if (token !== botToken) return;
+        if (!botActive() || !game || phase !== 'select' || !botSeats.has(game.turn)) return;
+        const move = chooseBotMove(game, game.turn);
+        if (!move) return;
+        lockIn(move, move.promo || 'q');
+      }, BOT_MOVE_DELAY_MS);
+    }
     const isFour = () => gameKind === 'four' || gameKind === 'fourteam' || gameKind === 'fourteam2';
     const isFourTeam = () => gameKind === 'fourteam' || gameKind === 'fourteam2';
     const isFourTeamTwo = () => gameKind === 'fourteam2';
@@ -1372,6 +1426,7 @@
         newFourGame(controls);
         return;
       }
+      clearBotMove();
       animationToken++;
       const board = Array.from({ length: 8 }, () => Array(8).fill(null));
       for (let c = 0; c < 8; c++) {
@@ -1424,7 +1479,11 @@
             ? 'White moves first. Pass the device between turns so each player only sees their own squares.'
             : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`)
           : (localMode
-            ? 'White moves first. Take turns passing the device after each move.'
+            ? (gameKind === 'chess' && botSeats.size === 2
+              ? 'Both sides are bots. Sit back and watch.'
+              : gameKind === 'chess' && botSeats.size === 1
+                ? `${SIDE[[...botSeats][0]]} is played by the bot. Take a turn when it is your move.`
+                : 'White moves first. Take turns passing the device after each move.')
             : `You are ${SIDE[myColor]}. ${SIDE[game.turn]} moves first.`);
       logEl.textContent = intro;
       game.history = [{
@@ -1439,6 +1498,7 @@
       updateStatus();
       render();
       startClockForTurn();
+      scheduleBotMove();
     }
 
     // ---------------------------------------------------------------------
@@ -3420,6 +3480,37 @@
       return false;
     }
 
+    // A deliberately simple bot: take the most valuable free material it can,
+    // break ties randomly, and always promote to a queen.
+    const BOT_PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+
+    function chooseBotMove(g, color) {
+      let best = null;
+      let bestScore = -Infinity;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = g.board[r][c];
+          if (!piece || piece.c !== color) continue;
+          for (const move of legalMoves(g, r, c)) {
+            const victim = move.enPassant
+              ? g.board[move.victim[0]][move.victim[1]]
+              : g.board[move.tr][move.tc];
+            let score = Math.random() * 0.4;
+            if (victim) score += 10 + (BOT_PIECE_VALUES[victim.t] || 0) * 2;
+            if (move.castle) score += 1;
+            if (piece.t === 'p' && (move.tr === 0 || move.tr === 7)) score += 12;
+            if (score > bestScore) {
+              bestScore = score;
+              best = move;
+            }
+          }
+        }
+      }
+      if (!best) return null;
+      const promoting = g.board[best.fr][best.fc].t === 'p' && (best.tr === 0 || best.tr === 7);
+      return promoting ? { ...best, promo: 'q' } : best;
+    }
+
     function buildPath(move, piece) {
       const dr = Math.sign(move.tr - move.fr), dc = Math.sign(move.tc - move.fc);
       const sliding = 'rbq'.includes(piece.t) || (piece.t === 'p' && move.double);
@@ -3783,7 +3874,7 @@
         if (phase === 'select') {
           const check = !isDark() && inCheck(game.board, game.turn) ? ' (Check)' : '';
           const tally = isThreeCheck() ? ` · Checks W${game.checks.w} B${game.checks.b}` : '';
-          if (localMode) setStatus(`${SIDE[game.turn]} to Move${check}${tally}`);
+          if (localMode) setStatus(`${SIDE[game.turn]}${botSeats.has(game.turn) ? ' (Bot)' : ''} to Move${check}${tally}`);
           else if (game.turn === myColor) setStatus(`Your Move${check}${tally}`);
           else setStatus(`Waiting for Opponent...${tally}`);
         } else if (phase === 'over') {
@@ -3815,6 +3906,7 @@
       if (spectatorMode) return;
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
       if (awaitingHostState) return;
+      if (botActive() && botSeats.has(game.turn)) return;
       const darkPlayer = isSimultaneous() ? myColor : game.turn;
       if (isDark() && localMode && darkView !== darkPlayer) return;
       if (isSimultaneous()) {
@@ -4273,6 +4365,7 @@
       render();
       if (isDark() && localMode && phase === 'select') scheduleHandoff();
       startClockForTurn();
+      scheduleBotMove();
     }
 
     // Dark Chess pass & play: hide the board before handing the device over.
@@ -4826,6 +4919,7 @@
       animationToken++;
       fourZombieToken++;
       localMode = false;
+      clearBotMove();
       clearAwaitingHostState();
       authoritativeVersion = 0;
       lastAuthoritativeVersion = 0;
@@ -5286,10 +5380,14 @@
       pendingAction = action;
       timeFieldsEl.innerHTML = '';
       const colors = isFour() ? FOUR_ORDER : ['w', 'b'];
+      const showBots = action === 'local' && gameKind === 'chess';
+      timeFieldsEl.classList.toggle('with-bots', showBots);
       const defaults = lastTimeControl || {};
       const head = document.createElement('div');
       head.className = 'time-row time-head';
-      head.innerHTML = '<span></span><span>Minutes</span><span>Increment</span>';
+      head.innerHTML = showBots
+        ? '<span></span><span>Bot</span><span>Minutes</span><span>Increment</span>'
+        : '<span></span><span>Minutes</span><span>Increment</span>';
       timeFieldsEl.appendChild(head);
       for (const color of colors) {
         const row = document.createElement('div');
@@ -5318,7 +5416,20 @@
         increment.step = '1';
         increment.value = String((defaults[color] && defaults[color].increment) || 0);
         increment.title = `${colorName(color)} increment in seconds`;
-        row.append(label, minutes, increment);
+        if (showBots) {
+          const botInput = document.createElement('input');
+          botInput.type = 'checkbox';
+          botInput.className = 'time-bot-input';
+          botInput.checked = botSeats.has(color);
+          botInput.title = `${colorName(color)} is played by the bot`;
+          botInput.setAttribute('aria-label', `${colorName(color)} is played by the bot`);
+          const botLabel = document.createElement('label');
+          botLabel.className = 'time-bot';
+          botLabel.appendChild(botInput);
+          row.append(label, botLabel, minutes, increment);
+        } else {
+          row.append(label, minutes, increment);
+        }
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
@@ -5328,6 +5439,28 @@
       allowSpectatorsInputEl.checked = false;
       syncModeInputEl.checked = simultaneousMode;
       memoryModeInputEl.checked = memoryMode;
+      if (showBots) {
+        // Bots play normal chess only, so keep Sync mode and bots exclusive.
+        const botBoxes = [...timeFieldsEl.querySelectorAll('.time-bot-input')];
+        const refresh = () => {
+          if (botBoxes.some(box => box.checked)) syncModeInputEl.checked = false;
+          for (const box of botBoxes) box.disabled = syncModeInputEl.checked;
+        };
+        for (const box of botBoxes) {
+          box.onchange = () => {
+            if (box.checked) syncModeInputEl.checked = false;
+            refresh();
+          };
+        }
+        syncModeInputEl.onchange = () => {
+          if (syncModeInputEl.checked) for (const box of botBoxes) box.checked = false;
+          refresh();
+        };
+        refresh();
+      } else {
+        syncModeInputEl.onchange = null;
+        syncModeInputEl.disabled = false;
+      }
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
         : 'Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.';
@@ -5504,8 +5637,18 @@
       const action = pendingAction;
       const controls = collectTimeControls();
       const allowSpectators = allowSpectatorsInputEl.checked;
+      const chosenBots = action === 'local' && gameKind === 'chess'
+        ? new Set([...timeFieldsEl.querySelectorAll('.time-row[data-color]')]
+          .filter(row => {
+            const box = row.querySelector('.time-bot-input');
+            return box && box.checked;
+          })
+          .map(row => row.dataset.color))
+        : new Set();
       simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
+      if (chosenBots.size) simultaneousMode = false;
       memoryMode = gameKind !== 'memory' && memoryModeInputEl.checked;
+      botSeats = chosenBots;
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
