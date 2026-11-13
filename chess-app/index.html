@@ -649,6 +649,7 @@
     }
 
     #sync-mode-option,
+    #memory-mode-option,
     #spectators-option {
       display: block;
       margin: 0 0 0.9rem;
@@ -656,11 +657,13 @@
     }
 
     #sync-mode-option[hidden],
+    #memory-mode-option[hidden],
     #spectators-option[hidden] {
       display: none;
     }
 
     #sync-mode-option input,
+    #memory-mode-option input,
     #spectators-option input {
       margin-right: 0.4rem;
       accent-color: var(--accent);
@@ -1107,6 +1110,7 @@
         <button type="button" data-minutes="10" data-increment="0">10 + 0</button>
       </div>
       <label id="sync-mode-option" hidden><input id="sync-mode" type="checkbox"> Play in Sync mode (both players choose before moves resolve)</label>
+      <label id="memory-mode-option" hidden><input id="memory-mode" type="checkbox"> Play in Memory mode (pieces are hidden while you play)</label>
       <label id="spectators-option" hidden><input id="allow-spectators" type="checkbox"> Allow Spectators</label>
       <div class="time-fields" id="time-fields"></div>
       <div class="time-actions">
@@ -1213,6 +1217,8 @@
     const timePresetsEl = document.getElementById('time-presets');
     const syncModeOptionEl = document.getElementById('sync-mode-option');
     const syncModeInputEl = document.getElementById('sync-mode');
+    const memoryModeOptionEl = document.getElementById('memory-mode-option');
+    const memoryModeInputEl = document.getElementById('memory-mode');
     const spectatorsOptionEl = document.getElementById('spectators-option');
     const allowSpectatorsInputEl = document.getElementById('allow-spectators');
     const timeCancelEl = document.getElementById('time-cancel');
@@ -1222,6 +1228,7 @@
     let game = null;
     let gameKind = 'sync';
     let simultaneousMode = false;
+    let memoryMode = false;
     let phase = null;
     let selected = null;
     let selectedDrop = null;
@@ -1269,7 +1276,7 @@
     const cloneBoard = board => board.map(row => row.map(p => p && { ...p }));
     const isSimultaneous = () => gameKind === 'sync' || simultaneousMode;
     const isDark = () => gameKind === 'dark';
-    const isMemory = () => gameKind === 'memory';
+    const isMemory = () => gameKind === 'memory' || memoryMode;
     const isCrazyhouse = () => gameKind === 'crazyhouse';
     const isDuck = () => gameKind === 'duck';
     const isAtomic = () => gameKind === 'atomic';
@@ -2855,7 +2862,7 @@
             if (states[piece.c] === 'zombie') sq.classList.add('zombie');
             const span = document.createElement('span');
             span.className = 'piece ' + piece.c;
-            span.textContent = FOUR_GLYPHS[piece.c][piece.t];
+            span.textContent = isMemory() && !entry ? '\u25CF' : FOUR_GLYPHS[piece.c][piece.t];
             sq.appendChild(span);
             if (!entry && phase === 'select' && piece.delayed) {
               const badge = document.createElement('span');
@@ -4619,7 +4626,7 @@
 
     function makeSpectatorSnapshot() {
       return {
-        kind: gameKind, simultaneous: isSimultaneous(), phase,
+        kind: gameKind, simultaneous: isSimultaneous(), memory: isMemory(), phase,
         game: networkCopy(game), pending: networkCopy(pending)
       };
     }
@@ -4628,6 +4635,7 @@
       if (!snapshot || !snapshot.game) return;
       setGameKind(GAMES.some(g => g.id === snapshot.kind) ? snapshot.kind : 'chess');
       simultaneousMode = snapshot.simultaneous === true;
+      memoryMode = snapshot.memory === true;
       game = restoreNetworkCopy(snapshot.game);
       if (game.clock) game.clock.last = Date.now();
       pending = snapshot.pending ? restoreNetworkCopy(snapshot.pending) : { w: null, b: null };
@@ -4660,6 +4668,7 @@
       }
       setGameKind(GAMES.some(g => g.id === snapshot.kind) ? snapshot.kind : 'crazyhouse');
       simultaneousMode = snapshot.simultaneous === true;
+      memoryMode = snapshot.memory === true;
       game = restoreNetworkCopy(snapshot.game);
       if (game.clock) game.clock.last = Date.now();
       pending = snapshot.pending ? restoreNetworkCopy(snapshot.pending) : { w: null, b: null };
@@ -4745,7 +4754,7 @@
 
     function restartTwoPlayerRematch() {
       const controls = game.clock.controls;
-      const message = { type: 'rematch-start', kind: gameKind, controls, simultaneous: isSimultaneous() };
+      const message = { type: 'rematch-start', kind: gameKind, controls, simultaneous: isSimultaneous(), memory: isMemory() };
       twoPlayerRematchRequests = new Set();
       send(message);
       newGame(controls);
@@ -4770,7 +4779,7 @@
       const controls = game.clock.controls;
       const message = {
         type: 'four-rematch-start', kind: gameKind, controls,
-        simultaneous: isSimultaneous()
+        simultaneous: isSimultaneous(), memory: isMemory()
       };
       network.rematchRequests = new Set();
       broadcastFour(message);
@@ -5034,10 +5043,12 @@
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
+          memoryMode = msg.memory === true;
           newGame(msg.controls || null);
         } else if (msg.type === 'four-start') {
           setGameKind(['four', 'fourteam', 'fourteam2'].includes(msg.kind) ? msg.kind : 'four');
           simultaneousMode = msg.simultaneous === true;
+          memoryMode = msg.memory === true;
           fourNetwork = {
             role: 'client', color: FOUR_JOIN_ORDER.includes(msg.color) ? msg.color : 'y',
             colors: Array.isArray(msg.colors) ? msg.colors : [FOUR_JOIN_ORDER.includes(msg.color) ? msg.color : 'y'],
@@ -5073,11 +5084,13 @@
           spectatorMode = false;
           setGameKind(msg.kind);
           simultaneousMode = msg.simultaneous === true;
+          memoryMode = msg.memory === true;
           newGame(msg.controls || null);
         } else if (msg.type === 'four-rematch-start') {
           if (!fourNetwork || !['client', 'spectator'].includes(fourNetwork.role)) return;
           setGameKind(msg.kind);
           simultaneousMode = msg.simultaneous === true;
+          memoryMode = msg.memory === true;
           if (fourNetwork) {
             fourNetwork.ready = true;
             fourNetwork.awaitingMove = false;
@@ -5182,7 +5195,7 @@
           }
           c.send({
             type: 'four-start', kind: network.kind, controls: network.controls,
-            simultaneous: isSimultaneous(), color, colors, ready: network.ready,
+            simultaneous: isSimultaneous(), memory: isMemory(), color, colors, ready: network.ready,
             openedCount: network.opened.size + 1
           });
           if (becameReady) broadcastFour({ type: 'four-ready' });
@@ -5222,7 +5235,7 @@
         }
         attachConnection(c);
         c.on('open', () => {
-          c.send({ type: 'start', kind: gameKind, controls, simultaneous: isSimultaneous() });
+          c.send({ type: 'start', kind: gameKind, controls, simultaneous: isSimultaneous(), memory: isMemory() });
           newGame(controls);
           if (isCrazyhouse()) sendAuthoritativeSnapshot();
         });
@@ -5310,9 +5323,11 @@
       }
       timeTitleEl.textContent = 'Time Control';
       syncModeOptionEl.hidden = gameKind === 'sync';
+      memoryModeOptionEl.hidden = gameKind === 'memory';
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
       syncModeInputEl.checked = simultaneousMode;
+      memoryModeInputEl.checked = memoryMode;
       timeHelpEl.textContent = isFour()
         ? 'Set minutes and increment independently for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.'
         : 'Set minutes and increment for each player. Set minutes to 0 for unlimited time. Increment is added after every completed move.';
@@ -5490,6 +5505,7 @@
       const controls = collectTimeControls();
       const allowSpectators = allowSpectatorsInputEl.checked;
       simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
+      memoryMode = gameKind !== 'memory' && memoryModeInputEl.checked;
       timeModalEl.hidden = true;
       pendingAction = null;
       if (action === 'host') {
