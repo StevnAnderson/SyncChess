@@ -1336,6 +1336,90 @@
         lockIn(move, move.promo || 'q');
       }, BOT_MOVE_DELAY_MS);
     }
+
+    // -------------------------------------
+    // Move sounds (synthesized with Web Audio; no asset files needed)
+    // -------------------------------------
+    let audioCtx = null;
+    let noiseBuffer = null;
+
+    function ensureAudio() {
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        return audioCtx;
+      }
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      try {
+        audioCtx = new Ctx();
+      } catch {
+        return null;
+      }
+      return audioCtx;
+    }
+
+    // A short decaying noise burst, reused for the thud body and the capture snap.
+    function getNoiseBuffer(ctx) {
+      if (noiseBuffer && noiseBuffer.sampleRate === ctx.sampleRate) return noiseBuffer;
+      const length = Math.floor(ctx.sampleRate * 0.14);
+      noiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
+      }
+      return noiseBuffer;
+    }
+
+    // Soft wooden thud for every move, with a crisp snap layered on for captures.
+    function playMoveSound(capture = false) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const now = ctx.currentTime + 0.005;
+
+      const thud = ctx.createOscillator();
+      const thudGain = ctx.createGain();
+      thud.type = 'sine';
+      const pitch = 135 + Math.random() * 25;
+      thud.frequency.setValueAtTime(pitch, now);
+      thud.frequency.exponentialRampToValueAtTime(pitch * 0.45, now + 0.12);
+      thudGain.gain.setValueAtTime(0.0001, now);
+      thudGain.gain.exponentialRampToValueAtTime(0.18, now + 0.006);
+      thudGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
+      thud.connect(thudGain).connect(ctx.destination);
+      thud.start(now);
+      thud.stop(now + 0.19);
+
+      const body = ctx.createBufferSource();
+      body.buffer = getNoiseBuffer(ctx);
+      const bodyFilter = ctx.createBiquadFilter();
+      bodyFilter.type = 'lowpass';
+      bodyFilter.frequency.setValueAtTime(650, now);
+      const bodyGain = ctx.createGain();
+      bodyGain.gain.setValueAtTime(0.1, now);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+      body.connect(bodyFilter).connect(bodyGain).connect(ctx.destination);
+      body.start(now);
+      body.stop(now + 0.1);
+
+      if (!capture) return;
+
+      const snapAt = now + 0.015;
+      const snap = ctx.createBufferSource();
+      snap.buffer = getNoiseBuffer(ctx);
+      snap.playbackRate.setValueAtTime(2.2, snapAt);
+      const snapFilter = ctx.createBiquadFilter();
+      snapFilter.type = 'bandpass';
+      snapFilter.frequency.setValueAtTime(3200, snapAt);
+      snapFilter.Q.setValueAtTime(1.1, snapAt);
+      const snapGain = ctx.createGain();
+      snapGain.gain.setValueAtTime(0.0001, snapAt);
+      snapGain.gain.exponentialRampToValueAtTime(0.3, snapAt + 0.003);
+      snapGain.gain.exponentialRampToValueAtTime(0.0001, snapAt + 0.06);
+      snap.connect(snapFilter).connect(snapGain).connect(ctx.destination);
+      snap.start(snapAt);
+      snap.stop(snapAt + 0.07);
+    }
+
     const isFour = () => gameKind === 'four' || gameKind === 'fourteam' || gameKind === 'fourteam2';
     const isFourTeam = () => gameKind === 'fourteam' || gameKind === 'fourteam2';
     const isFourTeamTwo = () => gameKind === 'fourteam2';
@@ -2144,6 +2228,7 @@
       if (fromType === 'p') game.idle = 0;
 
       game.board = fourApplyRaw(game.board, move, promo);
+      playMoveSound(!!target);
       const placed = game.board[move.tr][move.tc];
       if (fromType === 'p' && move.promotion) {
         lines.push(`${FOUR_SIDE[color]}'s Pawn promoted to a ${NAMES[placed.t]}.`);
@@ -2415,6 +2500,7 @@
       const { before, board, events, captures, enPassant, actions } = result;
       game.board = board;
       game.enPassant = enPassant;
+      playMoveSound(captures.length > 0);
       const lines = actions.map(action => fourMoveLabel(before, action.move));
       lines.push(...events);
       const delayedCapturers = new Set(captures.filter(capture => capture.delay).map(capture => capture.capturer.id));
@@ -4239,6 +4325,7 @@
       game.lastMoves = [{ ...move }];
       game.turn = opponent(color);
       addIncrement(color);
+      playMoveSound(false);
       selected = null;
       selectedDrop = null;
       const lines = [`${SIDE[color]} dropped a ${NAMES[move.dropType]} on ${squareName([move.tr, move.tc])}.`];
@@ -4279,6 +4366,7 @@
 
       const target = actualMove && before[actualMove.tr][actualMove.tc];
       const enPassantVictim = actualMove && actualMove.enPassant ? before[actualMove.victim[0]][actualMove.victim[1]] : null;
+      let capturedSomething = !!(target || enPassantVictim);
       if (target) {
         if (!atomic) storeCapturedPiece(opponent(target.c), target);
         if (!quiet) lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
@@ -4301,10 +4389,13 @@
       if (atomic && (target || enPassantVictim)) {
         const destroyed = atomicExplode(before, game.board, actualMove);
         for (const p of destroyed) game.captured[opponent(p.c)].push(p);
+        capturedSomething = capturedSomething || destroyed.length > 0;
         if (!quiet && destroyed.length) {
           lines.push(`Explosion destroyed ${destroyed.map(p => `${SIDE[p.c]}'s ${NAMES[p.t]}`).join(', ')}.`);
         }
       }
+
+      playMoveSound(capturedSomething && !quiet);
 
       const board = game.board;
       const sameId = (r, c) => !!(before[r][c] && board[r][c] && before[r][c].id === board[r][c].id);
@@ -4461,6 +4552,7 @@
       for (const p of result.captured) storeCapturedPiece(opponent(p.c), p);
       game.board = board;
       game.enPassant = result.enPassant;
+      playMoveSound(result.captured.length > 0);
 
       const lines = [notation, ...result.events];
       for (const color of ['w', 'b']) {
@@ -5592,6 +5684,9 @@
     document.addEventListener('click', e => {
       if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu();
     });
+    // Unlock the audio context on the first user gesture so later move sounds can play.
+    document.addEventListener('pointerdown', () => ensureAudio(), { once: true });
+    document.addEventListener('keydown', () => ensureAudio(), { once: true });
     document.addEventListener('keydown', e => {
       if (!timeModalEl.hidden) {
         if (e.key === 'Escape') {
