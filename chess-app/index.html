@@ -1227,6 +1227,13 @@
     let selectedDrop = null;
     let selectedDuckMove = null;
     let awaitingHostState = false;
+    let authoritativeVersion = 0;
+    let lastAuthoritativeVersion = 0;
+    let pendingHostMove = null;
+    let hostStateRetryTimer = null;
+    let guestMoveSeq = 0;
+    let lastGuestMoveSeq = 0;
+    const HOST_STATE_RETRY_MS = 2000;
     let pending = { w: null, b: null };
     let choosingPromotion = false;
     let animationToken = 0;
@@ -1383,7 +1390,11 @@
       selected = null;
       selectedDrop = null;
       selectedDuckMove = null;
-      awaitingHostState = false;
+      clearAwaitingHostState();
+      authoritativeVersion = 0;
+      lastAuthoritativeVersion = 0;
+      guestMoveSeq = 0;
+      lastGuestMoveSeq = 0;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -3898,8 +3909,11 @@
     function lockIn(move, promo) {
       const chosen = { ...move, promo };
       if (!localMode && isCrazyhouse() && myColor === 'b') {
+        guestMoveSeq++;
+        pendingHostMove = chosen;
         awaitingHostState = true;
-        send({ type: 'move', move: chosen });
+        send({ type: 'move', move: chosen, seq: guestMoveSeq });
+        scheduleHostStateRetry();
         updateStatus();
         render();
         return;
@@ -3907,7 +3921,7 @@
       if (!isSimultaneous()) {
         applyStandardMove(chosen);
         if (!localMode && isCrazyhouse() && myColor === 'w') {
-          send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+          sendAuthoritativeSnapshot();
           broadcastTwoPlayerSnapshot();
           return;
         }
@@ -3937,7 +3951,7 @@
         return;
       }
       if (!localMode && isCrazyhouse() && myColor === 'w') {
-        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+        sendAuthoritativeSnapshot();
       } else {
         send({ type: 'move', move: chosen });
       }
@@ -3952,15 +3966,23 @@
       }
     }
 
-    function receiveMove(move) {
-      if (isCrazyhouse() && !localMode && myColor === 'w' && !isValidCrazyhouseNetworkMove(move, opponent(myColor))) {
-        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+    function receiveMove(move, seq = null) {
+      const hostAuthoritative = isCrazyhouse() && !localMode && myColor === 'w';
+      if (hostAuthoritative && Number.isInteger(seq) && seq > 0 && seq <= lastGuestMoveSeq) {
+        // A retry of a move we already accepted; re-sync the guest so it can
+        // clear its "waiting for host" state.
+        sendAuthoritativeSnapshot();
         return;
       }
+      if (hostAuthoritative && !isValidCrazyhouseNetworkMove(move, opponent(myColor))) {
+        sendAuthoritativeSnapshot();
+        return;
+      }
+      if (hostAuthoritative && Number.isInteger(seq) && seq > 0) lastGuestMoveSeq = seq;
       if (!isSimultaneous()) {
         applyStandardMove(move, true);
-        if (isCrazyhouse() && !localMode && myColor === 'w') {
-          send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+        if (hostAuthoritative) {
+          sendAuthoritativeSnapshot();
         }
         if (!localMode && myColor === 'w') {
           broadcastTwoPlayerSpectators({ type: 'move', move });
@@ -3969,8 +3991,8 @@
         return;
       }
       pending[opponent(myColor)] = move;
-      if (isCrazyhouse() && !localMode && myColor === 'w' && !pending[myColor]) {
-        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+      if (hostAuthoritative && !pending[myColor]) {
+        sendAuthoritativeSnapshot();
       }
       if (!localMode && myColor === 'w') broadcastTwoPlayerSpectators({ type: 'move', move });
       if (phase === 'select' && pending[myColor]) resolveTurn();
@@ -4381,7 +4403,7 @@
       if (phase === 'select' && isDark() && localMode) beginHandoff();
       else startClockForTurn();
       if (!localMode && isCrazyhouse() && myColor === 'w') {
-        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+        sendAuthoritativeSnapshot();
       }
       if (!localMode && myColor === 'w') broadcastTwoPlayerSnapshot();
       if (phase === 'select' && pending.w && pending.b) resolveTurn();
@@ -4552,6 +4574,37 @@
       if (conn && conn.open) conn.send(msg);
     }
 
+    // Crazyhouse online games are host-authoritative. Every state change on the
+    // host bumps a version and sends a full snapshot to the guest. The guest
+    // remembers the newest version it has seen; the periodic ping carries the
+    // host's version so a guest that missed a snapshot can ask for a resend.
+    function sendAuthoritativeSnapshot() {
+      if (localMode || myColor !== 'w' || !isCrazyhouse() || !game) return;
+      authoritativeVersion++;
+      send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot(), version: authoritativeVersion });
+    }
+
+    function clearAwaitingHostState() {
+      awaitingHostState = false;
+      pendingHostMove = null;
+      if (hostStateRetryTimer) {
+        clearTimeout(hostStateRetryTimer);
+        hostStateRetryTimer = null;
+      }
+    }
+
+    // If the guest's move never reaches the host (or the host's reply is lost),
+    // keep resending it until an authoritative snapshot clears the wait.
+    function scheduleHostStateRetry() {
+      if (hostStateRetryTimer) clearTimeout(hostStateRetryTimer);
+      hostStateRetryTimer = setTimeout(() => {
+        hostStateRetryTimer = null;
+        if (!awaitingHostState || !pendingHostMove) return;
+        send({ type: 'move', move: pendingHostMove, seq: guestMoveSeq });
+        scheduleHostStateRetry();
+      }, HOST_STATE_RETRY_MS);
+    }
+
     function networkCopy(value) {
       return JSON.parse(JSON.stringify(value, (_key, item) =>
         item === Infinity ? { __syncChessInfinity: true } : item));
@@ -4599,8 +4652,12 @@
       }
     }
 
-    function applyAuthoritativeSnapshot(snapshot) {
+    function applyAuthoritativeSnapshot(snapshot, version = null) {
       if (!snapshot || !snapshot.game) return;
+      if (Number.isInteger(version) && version > 0) {
+        if (version <= lastAuthoritativeVersion) return;
+        lastAuthoritativeVersion = version;
+      }
       setGameKind(GAMES.some(g => g.id === snapshot.kind) ? snapshot.kind : 'crazyhouse');
       simultaneousMode = snapshot.simultaneous === true;
       game = restoreNetworkCopy(snapshot.game);
@@ -4612,7 +4669,7 @@
       reviewIndex = 0;
       spectatorMode = false;
       localMode = false;
-      awaitingHostState = false;
+      clearAwaitingHostState();
       selected = null;
       selectedDrop = null;
       selectedDuckMove = null;
@@ -4692,6 +4749,7 @@
       twoPlayerRematchRequests = new Set();
       send(message);
       newGame(controls);
+      if (isCrazyhouse() && !localMode && myColor === 'w') sendAuthoritativeSnapshot();
       broadcastTwoPlayerSnapshot();
     }
 
@@ -4759,6 +4817,11 @@
       animationToken++;
       fourZombieToken++;
       localMode = false;
+      clearAwaitingHostState();
+      authoritativeVersion = 0;
+      lastAuthoritativeVersion = 0;
+      guestMoveSeq = 0;
+      lastGuestMoveSeq = 0;
       const oldFourNetwork = fourNetwork;
       fourNetwork = null;
       spectatorMode = false;
@@ -4806,6 +4869,7 @@
     function opponentLeft(c) {
       if (conn !== c) return;
       conn = null;
+      clearAwaitingHostState();
       c.close();
       if (game && phase !== 'over') {
         animationToken++;
@@ -4992,7 +5056,14 @@
         } else if (msg.type === 'spectator-start' || msg.type === 'spectator-state' || msg.type === 'four-spectator-start') {
           applySpectatorSnapshot(msg.snapshot);
         } else if (msg.type === 'authoritative-state') {
-          applyAuthoritativeSnapshot(msg.snapshot);
+          applyAuthoritativeSnapshot(msg.snapshot, msg.version);
+        } else if (msg.type === 'request-state') {
+          if (isCrazyhouse() && !localMode && myColor === 'w') sendAuthoritativeSnapshot();
+        } else if (msg.type === 'ping') {
+          if (isCrazyhouse() && !localMode && myColor === 'b' && !spectatorMode &&
+            Number.isInteger(msg.stateVersion) && msg.stateVersion > lastAuthoritativeVersion) {
+            send({ type: 'request-state' });
+          }
         } else if (msg.type === 'spectator-move') {
           applySpectatorMove(msg.move);
         } else if (msg.type === 'rematch-status') {
@@ -5017,7 +5088,7 @@
           applyRemoteFourMessage(msg);
         } else if (msg.type === 'move' && game) {
           if (spectatorMode) applySpectatorMove(msg.move);
-          else receiveMove(msg.move);
+          else receiveMove(msg.move, msg.seq);
         } else if (msg.type === 'full') {
           leaveGame();
           setStatus('That Game Is Already Full', true);
@@ -5035,7 +5106,9 @@
         for (const c of hostedSpectators) if (c && c.open) c.send({ type: 'ping' });
       }
       if (!conn || !conn.open) return;
-      send({ type: 'ping' });
+      const ping = { type: 'ping' };
+      if (isCrazyhouse() && !localMode && myColor === 'w' && game) ping.stateVersion = authoritativeVersion;
+      send(ping);
       if (game && Date.now() - lastHeard > 10000) opponentLeft(conn);
     }, 2000);
 
@@ -5151,7 +5224,7 @@
         c.on('open', () => {
           c.send({ type: 'start', kind: gameKind, controls, simultaneous: isSimultaneous() });
           newGame(controls);
-          if (isCrazyhouse()) send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+          if (isCrazyhouse()) sendAuthoritativeSnapshot();
         });
       });
       p.on('error', err => {
