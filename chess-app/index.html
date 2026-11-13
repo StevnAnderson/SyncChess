@@ -441,6 +441,16 @@
       font-size: clamp(0.7rem, 3.1vw, 1.8rem);
     }
 
+    .board.teeko {
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(5, 1fr);
+      width: min(100%, 420px);
+    }
+
+    .board.teeko .square {
+      font-size: clamp(2rem, 9vw, 3.6rem);
+    }
+
     .board.four .piece.b {
       color: #5aa9ff;
       text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
@@ -1068,6 +1078,16 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-teeko" hidden>
+      <h2>How Teeko Works</h2>
+      <ul>
+        <li>Teeko is played on a 5&times;5 board. Each player has four pawns, and there is no capturing.</li>
+        <li>Players alternate placing one pawn on any empty square until all eight pawns are on the board.</li>
+        <li>After that, players alternate moving one pawn one square in any direction, like a king.</li>
+        <li>Win by forming a straight line of four pawns (orthogonal or diagonal), or by forming a square of any size and orientation with your four pawns.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-threecheck" hidden>
       <h2>How Three-Check Chess Works</h2>
       <ul>
@@ -1152,6 +1172,8 @@
     const FOUR_ORDER = ['r', 'b', 'y', 'g'];
     const FOUR_JOIN_ORDER = ['y', 'b', 'g'];
     const FOUR_SIZE = 14;
+    const TEEKO_SIZE = 5;
+    const TEEKO_PIECES = 4;
     // Standard back ranks as seen from each player's own left to right.
     // White-team players have the king to the right of the queen; black-team
     // players have it to the left, matching normal chess.
@@ -1174,6 +1196,7 @@
       { id: 'kinghill', name: 'King of the Hill' },
       { id: 'memory', name: 'Memory Chess' },
       { id: 'sync', name: 'Sync Chess' },
+      { id: 'teeko', name: 'Teeko' },
       { id: 'threecheck', name: 'Three-Check' }
     ];
     GLYPHS.r = GLYPHS.w;
@@ -1200,6 +1223,7 @@
       dark: document.getElementById('rules-dark'),
       kinghill: document.getElementById('rules-kinghill'),
       sync: document.getElementById('rules-sync'),
+      teeko: document.getElementById('rules-teeko'),
       threecheck: document.getElementById('rules-threecheck')
     };
     const handoffEl = document.getElementById('handoff');
@@ -1307,6 +1331,7 @@
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
+    const isTeeko = () => gameKind === 'teeko';
     const botsAllowed = () => localMode && gameKind === 'chess';
     const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
 
@@ -1506,6 +1531,10 @@
     }
 
     function newGame(controls = null) {
+      if (isTeeko()) {
+        newTeekoGame(controls);
+        return;
+      }
       if (isFour()) {
         newFourGame(controls);
         return;
@@ -1583,6 +1612,260 @@
       render();
       startClockForTurn();
       scheduleBotMove();
+    }
+
+    // ---------------------------------------------------------------------
+    // Teeko (5x5 board, four pawns each, placement then king-like movement)
+    // ---------------------------------------------------------------------
+    const teekoSquareName = (r, c) => FILES[c] + (TEEKO_SIZE - r);
+
+    function teekoMoves(board, r, c) {
+      const moves = [];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const tr = r + dr, tc = c + dc;
+          if (inBounds(tr, tc, TEEKO_SIZE) && !board[tr][tc]) moves.push({ fr: r, fc: c, tr, tc });
+        }
+      }
+      return moves;
+    }
+
+    function teekoHasLine(board, color) {
+      const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+      for (let r = 0; r < TEEKO_SIZE; r++) {
+        for (let c = 0; c < TEEKO_SIZE; c++) {
+          const piece = board[r][c];
+          if (!piece || piece.c !== color) continue;
+          for (const [dr, dc] of directions) {
+            let count = 1;
+            for (let step = 1; step < TEEKO_PIECES; step++) {
+              const rr = r + dr * step, cc = c + dc * step;
+              if (!inBounds(rr, cc, TEEKO_SIZE)) break;
+              const next = board[rr][cc];
+              if (!next || next.c !== color) break;
+              count++;
+            }
+            if (count >= TEEKO_PIECES) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function teekoHasSquare(board, color) {
+      const points = [];
+      for (let r = 0; r < TEEKO_SIZE; r++) {
+        for (let c = 0; c < TEEKO_SIZE; c++) {
+          const piece = board[r][c];
+          if (piece && piece.c === color) points.push([r, c]);
+        }
+      }
+      if (points.length < TEEKO_PIECES) return false;
+      const distance2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+      for (let a = 0; a < points.length; a++) {
+        for (let b = a + 1; b < points.length; b++) {
+          for (let c = b + 1; c < points.length; c++) {
+            for (let d = c + 1; d < points.length; d++) {
+              // A square has four equal sides and two equal diagonals that are twice as long.
+              const lengths = [
+                distance2(points[a], points[b]), distance2(points[a], points[c]),
+                distance2(points[a], points[d]), distance2(points[b], points[c]),
+                distance2(points[b], points[d]), distance2(points[c], points[d])
+              ].sort((x, y) => x - y);
+              if (lengths[0] > 0 && lengths[0] === lengths[1] && lengths[1] === lengths[2] &&
+                lengths[2] === lengths[3] && lengths[4] === lengths[5] && lengths[4] === 2 * lengths[0]) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    function newTeekoGame(controls = null) {
+      clearBotMove();
+      animationToken++;
+      const board = Array.from({ length: TEEKO_SIZE }, () => Array(TEEKO_SIZE).fill(null));
+      game = {
+        board,
+        castling: { wK: false, wQ: false, bK: false, bQ: false },
+        enPassant: [],
+        lastMoves: [],
+        captured: { w: [], b: [] },
+        checks: { w: 0, b: 0 },
+        turn: 'w',
+        result: null,
+        stage: 'placement',
+        placed: { w: 0, b: 0 },
+        clock: createClock(controls, ['w', 'b'])
+      };
+      showRematchStatus();
+      twoPlayerRematchRequests = new Set();
+      phase = 'select';
+      selected = null;
+      selectedDrop = null;
+      selectedDuckMove = null;
+      clearAwaitingHostState();
+      authoritativeVersion = 0;
+      lastAuthoritativeVersion = 0;
+      guestMoveSeq = 0;
+      lastGuestMoveSeq = 0;
+      pending = { w: null, b: null };
+      choosingPromotion = false;
+      promoEl.hidden = true;
+      clearTimeout(handoffTimer);
+      handoffTimer = null;
+      handoff = false;
+      handoffEl.hidden = true;
+      darkView = 'w';
+      reviewing = false;
+      reviewIndex = 0;
+      reviewBarEl.hidden = true;
+      reviewBtnEl.hidden = true;
+      panelEl.hidden = false;
+      const intro = localMode
+        ? 'Place four pawns each on the empty board, then move one pawn a square at a time like a king. No captures.'
+        : `You are ${SIDE[myColor]}. Place your four pawns, then move one pawn a square at a time. No captures.`;
+      logEl.textContent = intro;
+      game.history = [{
+        board: cloneBoard(board),
+        captured: { w: [], b: [] },
+        lastMoves: [],
+        lines: [intro],
+        reviewLines: [intro],
+        label: 'Starting Position'
+      }];
+      game.repetitionKeys = [positionKey()];
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
+    function applyTeekoAction(move) {
+      if (!game || phase !== 'select' || !move) return;
+      const color = game.turn;
+      const placing = game.stage === 'placement';
+      const tr = move.tr, tc = move.tc;
+      if (!inBounds(tr, tc, TEEKO_SIZE)) return;
+      if (placing) {
+        if (game.placed[color] >= TEEKO_PIECES || game.board[tr][tc]) return;
+      } else {
+        const fr = move.fr, fc = move.fc;
+        if (!Number.isInteger(fr) || !Number.isInteger(fc) || !inBounds(fr, fc, TEEKO_SIZE)) return;
+        const piece = game.board[fr][fc];
+        if (!piece || piece.c !== color) return;
+        if (game.board[tr][tc]) return;
+        if (Math.max(Math.abs(tr - fr), Math.abs(tc - fc)) !== 1) return;
+      }
+
+      syncClock();
+      selected = null;
+      if (placing) {
+        game.board[tr][tc] = { t: 'p', c: color, id: nextId++, delayed: false };
+        game.placed[color]++;
+      } else {
+        game.board[tr][tc] = game.board[move.fr][move.fc];
+        game.board[move.fr][move.fc] = null;
+      }
+      game.lastMoves = [{ ...move }];
+      const text = placing
+        ? `Place on ${teekoSquareName(tr, tc)}`
+        : `Move ${teekoSquareName(move.fr, move.fc)} to ${teekoSquareName(tr, tc)}`;
+      const lines = [text];
+      if (teekoHasLine(game.board, color) || teekoHasSquare(game.board, color)) {
+        game.result = `Teeko - ${SIDE[color]} Wins`;
+        lines.push(game.result);
+        phase = 'over';
+      } else if (placing && game.placed.w >= TEEKO_PIECES && game.placed.b >= TEEKO_PIECES) {
+        game.stage = 'movement';
+        lines.push('All eight pawns are placed. Move one pawn per turn.');
+      }
+      game.turn = opponent(color);
+      addIncrement(color);
+      pushHistory(lines, `${SIDE[color]} ${text}`);
+      setLog(lines);
+      playMoveSound(false);
+      updateStatus();
+      render();
+      startClockForTurn();
+    }
+
+    function onTeekoSquareClick(r, c) {
+      if (spectatorMode) return;
+      if (reviewing || phase !== 'select' || handoff) return;
+      if (awaitingHostState) return;
+      if (!localMode && game.turn !== myColor) return;
+      if (game.stage === 'placement') {
+        if (game.board[r][c]) return;
+        selected = null;
+        lockIn({ teeko: true, tr: r, tc: c }, null);
+        return;
+      }
+      const piece = game.board[r][c];
+      if (piece && piece.c === game.turn) {
+        selected = { r, c, moves: teekoMoves(game.board, r, c) };
+        render();
+        return;
+      }
+      if (selected && selected.moves.some(m => m.tr === r && m.tc === c)) {
+        const move = { teeko: true, fr: selected.r, fc: selected.c, tr: r, tc: c };
+        selected = null;
+        lockIn(move, null);
+        return;
+      }
+      selected = null;
+      render();
+    }
+
+    function renderTeeko() {
+      boardEl.classList.remove('four');
+      boardEl.classList.add('teeko');
+      boardEl.innerHTML = '';
+      fourPanelEl.hidden = true;
+      extraControlsEl.hidden = true;
+      capturedEl.w.hidden = true;
+      capturedEl.b.hidden = true;
+      const entry = reviewing && game.history ? game.history[reviewIndex] : null;
+      const board = entry ? entry.board : game.board;
+      const lastMoves = entry ? entry.lastMoves : game.lastMoves;
+      const flip = myColor === 'b' && !localMode;
+      for (let vr = 0; vr < TEEKO_SIZE; vr++) {
+        for (let vc = 0; vc < TEEKO_SIZE; vc++) {
+          const r = flip ? TEEKO_SIZE - 1 - vr : vr;
+          const c = flip ? TEEKO_SIZE - 1 - vc : vc;
+          const sq = document.createElement('div');
+          sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
+          if (lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
+          if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+          const target = selected && selected.moves && selected.moves.find(m => m.tr === r && m.tc === c);
+          if (target) sq.classList.add('target');
+          if (!entry && phase === 'select' && game.stage === 'placement' && !board[r][c] &&
+            (localMode || game.turn === myColor)) {
+            sq.classList.add('target');
+          }
+          const piece = board[r][c];
+          if (piece) {
+            const span = document.createElement('span');
+            span.className = 'piece ' + piece.c;
+            span.textContent = GLYPHS[piece.c][piece.t] || GLYPHS[piece.c].p;
+            sq.appendChild(span);
+          }
+          sq.addEventListener('click', () => onSquareClick(r, c));
+          boardEl.appendChild(sq);
+        }
+      }
+      updateClockDisplay();
+      const total = game.history ? game.history.length - 1 : 0;
+      reviewBtnEl.hidden = !(phase === 'over' && !entry && total > 0);
+      updateRematchControls();
+      reviewBarEl.hidden = !entry;
+      if (entry) {
+        reviewLabelEl.textContent = `${entry.label} (${reviewIndex} / ${total})`;
+        reviewFirstEl.disabled = reviewPrevEl.disabled = reviewIndex === 0;
+        reviewNextEl.disabled = reviewLastEl.disabled = reviewIndex === total;
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -2967,6 +3250,7 @@
     }
 
     function renderFour() {
+      boardEl.classList.remove('teeko');
       boardEl.classList.add('four');
       boardEl.innerHTML = '';
       fourPanelEl.hidden = false;
@@ -3903,6 +4187,22 @@
 
     function updateStatus() {
       if (!game) return;
+      if (isTeeko()) {
+        const placing = game.stage === 'placement';
+        if (phase === 'over') { setStatus(game.result); return; }
+        if (spectatorMode) {
+          setStatus(`Spectating · ${SIDE[game.turn]} ${placing ? 'to place' : 'to move'}`);
+        } else if (localMode) {
+          setStatus(`${SIDE[game.turn]} ${placing
+            ? `to Place (${game.placed[game.turn]}/${TEEKO_PIECES})`
+            : 'to Move'}`);
+        } else if (game.turn === myColor) {
+          setStatus(placing ? `Place a Pawn (${game.placed[game.turn]}/${TEEKO_PIECES})` : 'Your Move');
+        } else {
+          setStatus('Waiting for Opponent...');
+        }
+        return;
+      }
       if (spectatorMode && !isFour()) {
         setStatus(phase === 'over' ? `Spectating · ${game.result}` : `Spectating · ${SIDE[game.turn]} to move`);
         return;
@@ -3985,6 +4285,10 @@
     }
 
     function onSquareClick(r, c) {
+      if (isTeeko()) {
+        onTeekoSquareClick(r, c);
+        return;
+      }
       if (isFour()) {
         onFourSquareClick(r, c);
         return;
@@ -4344,6 +4648,10 @@
 
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
     function applyStandardMove(move, incoming = false) {
+      if (move.teeko) {
+        applyTeekoAction(move);
+        return;
+      }
       if (move.drop) {
         applyCrazyhouseDropMove(move);
         return;
@@ -4644,11 +4952,16 @@
 
     function render() {
       if (!game) return;
+      if (isTeeko()) {
+        renderTeeko();
+        return;
+      }
       if (isFour()) {
         renderFour();
         return;
       }
       boardEl.classList.remove('four');
+      boardEl.classList.remove('teeko');
       fourPanelEl.hidden = true;
       extraControlsEl.hidden = true;
       capturedEl.w.hidden = false;
@@ -5053,6 +5366,7 @@
       capturedEl.w.hidden = false;
       capturedEl.b.hidden = false;
       boardEl.classList.remove('four');
+      boardEl.classList.remove('teeko');
     }
 
     function randomCode() {
@@ -5525,12 +5839,12 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync';
-      memoryModeOptionEl.hidden = gameKind === 'memory';
+      syncModeOptionEl.hidden = gameKind === 'sync' || gameKind === 'teeko';
+      memoryModeOptionEl.hidden = gameKind === 'memory' || gameKind === 'teeko';
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
-      syncModeInputEl.checked = simultaneousMode;
-      memoryModeInputEl.checked = memoryMode;
+      syncModeInputEl.checked = !isTeeko() && simultaneousMode;
+      memoryModeInputEl.checked = !isTeeko() && memoryMode;
       if (showBots) {
         // Bots play normal chess only, so keep Sync mode and bots exclusive.
         const botBoxes = [...timeFieldsEl.querySelectorAll('.time-bot-input')];
@@ -5647,6 +5961,7 @@
       capturedEl.w.hidden = false;
       capturedEl.b.hidden = false;
       boardEl.classList.remove('four');
+      boardEl.classList.remove('teeko');
       logEl.textContent = '';
       setStatus('Host or join a game');
     }
@@ -5740,9 +6055,9 @@
           })
           .map(row => row.dataset.color))
         : new Set();
-      simultaneousMode = gameKind === 'sync' || syncModeInputEl.checked;
+      simultaneousMode = gameKind === 'sync' || (!isTeeko() && syncModeInputEl.checked);
       if (chosenBots.size) simultaneousMode = false;
-      memoryMode = gameKind !== 'memory' && memoryModeInputEl.checked;
+      memoryMode = gameKind !== 'memory' && !isTeeko() && memoryModeInputEl.checked;
       botSeats = chosenBots;
       timeModalEl.hidden = true;
       pendingAction = null;
