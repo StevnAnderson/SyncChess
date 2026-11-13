@@ -1226,6 +1226,7 @@
     let selected = null;
     let selectedDrop = null;
     let selectedDuckMove = null;
+    let awaitingHostState = false;
     let pending = { w: null, b: null };
     let choosingPromotion = false;
     let animationToken = 0;
@@ -1382,6 +1383,7 @@
       selected = null;
       selectedDrop = null;
       selectedDuckMove = null;
+      awaitingHostState = false;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -1560,6 +1562,7 @@
       selected = null;
       selectedDrop = null;
       selectedDuckMove = null;
+      awaitingHostState = false;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -3754,6 +3757,10 @@
         }
         return;
       }
+      if (isCrazyhouse() && !localMode && myColor === 'b' && awaitingHostState) {
+        setStatus('Waiting for the host to confirm the move.');
+        return;
+      }
       if (!isSimultaneous()) {
         if (phase === 'select') {
           const check = !isDark() && inCheck(game.board, game.turn) ? ' (Check)' : '';
@@ -3789,6 +3796,7 @@
       }
       if (spectatorMode) return;
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
+      if (awaitingHostState) return;
       const darkPlayer = isSimultaneous() ? myColor : game.turn;
       if (isDark() && localMode && darkView !== darkPlayer) return;
       if (isSimultaneous()) {
@@ -3850,7 +3858,7 @@
     }
 
     function chooseCrazyhouseReserve(color, id) {
-      if (!isCrazyhouse() || !game || spectatorMode || reviewing || phase !== 'select' || choosingPromotion) return;
+      if (!isCrazyhouse() || !game || spectatorMode || reviewing || phase !== 'select' || choosingPromotion || awaitingHostState) return;
       const actor = activeColor();
       if (color !== actor || (!isSimultaneous() && game.turn !== actor) || (isSimultaneous() && pending[actor])) return;
       const piece = game.captured[color].find(item => item.id === id);
@@ -3889,8 +3897,20 @@
 
     function lockIn(move, promo) {
       const chosen = { ...move, promo };
+      if (!localMode && isCrazyhouse() && myColor === 'b') {
+        awaitingHostState = true;
+        send({ type: 'move', move: chosen });
+        updateStatus();
+        render();
+        return;
+      }
       if (!isSimultaneous()) {
         applyStandardMove(chosen);
+        if (!localMode && isCrazyhouse() && myColor === 'w') {
+          send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+          broadcastTwoPlayerSnapshot();
+          return;
+        }
         send({ type: 'move', move: chosen });
         if (!localMode && myColor === 'w') {
           broadcastTwoPlayerSpectators({ type: 'move', move: chosen });
@@ -3916,7 +3936,11 @@
         }
         return;
       }
-      send({ type: 'move', move: chosen });
+      if (!localMode && isCrazyhouse() && myColor === 'w') {
+        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+      } else {
+        send({ type: 'move', move: chosen });
+      }
       if (!localMode && myColor === 'w') broadcastTwoPlayerSpectators({ type: 'move', move: chosen });
       if (pending[opponent(myColor)]) {
         resolveTurn();
@@ -3929,8 +3953,15 @@
     }
 
     function receiveMove(move) {
+      if (isCrazyhouse() && !localMode && myColor === 'w' && !isValidCrazyhouseNetworkMove(move, opponent(myColor))) {
+        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+        return;
+      }
       if (!isSimultaneous()) {
         applyStandardMove(move, true);
+        if (isCrazyhouse() && !localMode && myColor === 'w') {
+          send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+        }
         if (!localMode && myColor === 'w') {
           broadcastTwoPlayerSpectators({ type: 'move', move });
           broadcastTwoPlayerSnapshot();
@@ -3938,12 +3969,33 @@
         return;
       }
       pending[opponent(myColor)] = move;
+      if (isCrazyhouse() && !localMode && myColor === 'w' && !pending[myColor]) {
+        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+      }
       if (!localMode && myColor === 'w') broadcastTwoPlayerSpectators({ type: 'move', move });
       if (phase === 'select' && pending[myColor]) resolveTurn();
       else {
         updateStatus();
         startClockForTurn();
       }
+    }
+
+    function isValidCrazyhouseNetworkMove(move, color) {
+      if (!move || !game || !['w', 'b'].includes(color)) return false;
+      if (isSimultaneous() && pending[color]) return false;
+      if (!isSimultaneous() && game.turn !== color) return false;
+      if (move.drop) {
+        return move.dropColor === color &&
+          game.captured[color].some(piece => piece.id === move.dropId && piece.t === move.dropType) &&
+          crazyhouseDropAllowed(game.board, color, move.dropType, move.tr, move.tc);
+      }
+      const piece = inBounds(move.fr, move.fc) && game.board[move.fr][move.fc];
+      if (!piece || piece.c !== color) return false;
+      const fields = ['fr', 'fc', 'tr', 'tc', 'castle', 'double', 'enPassant', 'victim'];
+      const sameMove = legalMoves(game, move.fr, move.fc).some(legal =>
+        fields.every(key => JSON.stringify(legal[key]) === JSON.stringify(move[key])));
+      if (!sameMove) return false;
+      return !move.promo || ['q', 'r', 'b', 'n'].includes(move.promo);
     }
 
     function simulateCrazyhouseDrops(g, selections) {
@@ -4328,6 +4380,9 @@
       render();
       if (phase === 'select' && isDark() && localMode) beginHandoff();
       else startClockForTurn();
+      if (!localMode && isCrazyhouse() && myColor === 'w') {
+        send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
+      }
       if (!localMode && myColor === 'w') broadcastTwoPlayerSnapshot();
       if (phase === 'select' && pending.w && pending.b) resolveTurn();
     }
@@ -4464,7 +4519,7 @@
             button.className = 'captured-piece';
             button.textContent = GLYPHS[reserve.c][reserve.t];
             button.setAttribute('aria-label', `${SIDE[inventoryColor]} reserve ${NAMES[reserve.t]}`);
-            const canSelect = !entry && phase === 'select' && !spectatorMode &&
+            const canSelect = !entry && phase === 'select' && !spectatorMode && !awaitingHostState &&
               (isSimultaneous()
                 ? inventoryColor === myColor && !pending[myColor]
                 : inventoryColor === (localMode ? game.turn : myColor));
@@ -4542,6 +4597,37 @@
         updateStatus();
         render();
       }
+    }
+
+    function applyAuthoritativeSnapshot(snapshot) {
+      if (!snapshot || !snapshot.game) return;
+      setGameKind(GAMES.some(g => g.id === snapshot.kind) ? snapshot.kind : 'crazyhouse');
+      simultaneousMode = snapshot.simultaneous === true;
+      game = restoreNetworkCopy(snapshot.game);
+      if (game.clock) game.clock.last = Date.now();
+      pending = snapshot.pending ? restoreNetworkCopy(snapshot.pending) : { w: null, b: null };
+      phase = snapshot.phase || 'select';
+      animationToken++;
+      reviewing = false;
+      reviewIndex = 0;
+      spectatorMode = false;
+      localMode = false;
+      awaitingHostState = false;
+      selected = null;
+      selectedDrop = null;
+      selectedDuckMove = null;
+      choosingPromotion = false;
+      promoEl.hidden = true;
+      handoff = false;
+      handoffEl.hidden = true;
+      reviewBarEl.hidden = true;
+      reviewBtnEl.hidden = true;
+      panelEl.hidden = false;
+      const last = game.history && game.history[game.history.length - 1];
+      if (last) setLog(last.lines);
+      updateStatus();
+      render();
+      startClockForTurn();
     }
 
     function applySpectatorMove(move) {
@@ -4905,6 +4991,8 @@
           }
         } else if (msg.type === 'spectator-start' || msg.type === 'spectator-state' || msg.type === 'four-spectator-start') {
           applySpectatorSnapshot(msg.snapshot);
+        } else if (msg.type === 'authoritative-state') {
+          applyAuthoritativeSnapshot(msg.snapshot);
         } else if (msg.type === 'spectator-move') {
           applySpectatorMove(msg.move);
         } else if (msg.type === 'rematch-status') {
@@ -5063,6 +5151,7 @@
         c.on('open', () => {
           c.send({ type: 'start', kind: gameKind, controls, simultaneous: isSimultaneous() });
           newGame(controls);
+          if (isCrazyhouse()) send({ type: 'authoritative-state', snapshot: makeSpectatorSnapshot() });
         });
       });
       p.on('error', err => {
