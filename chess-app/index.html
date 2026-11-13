@@ -410,6 +410,12 @@
       text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
     }
 
+    .piece.duck {
+      font-family: system-ui, sans-serif;
+      font-size: 0.78em;
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+    }
+
     .piece.r {
       color: #ff6b6b;
       text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
@@ -996,6 +1002,16 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-duck" hidden>
+      <h2>How Duck Chess Works</h2>
+      <ul>
+        <li>Normal chess rules apply, then each turn you place a duck on a vacant square.</li>
+        <li>Ducks cannot be captured and block pieces from moving to or through their squares.</li>
+        <li>If a duck is placed in a piece&rsquo;s path that turn, the piece stops on the square before the duck.</li>
+        <li>In Sync mode, each player chooses a duck square. If both choose the same square, only one duck is placed there.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-dark" hidden>
       <h2>How Dark Chess Works</h2>
       <ul>
@@ -1102,10 +1118,10 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script>
     const GLYPHS = {
-      w: { k: '\u2654', q: '\u2655', r: '\u2656', b: '\u2657', n: '\u2658', p: '\u2659' },
-      b: { k: '\u265A', q: '\u265B', r: '\u265C', b: '\u265D', n: '\u265E', p: '\u265F' }
+      w: { k: '\u2654', q: '\u2655', r: '\u2656', b: '\u2657', n: '\u2658', p: '\u2659', d: '\uD83E\uDD86' },
+      b: { k: '\u265A', q: '\u265B', r: '\u265C', b: '\u265D', n: '\u265E', p: '\u265F', d: '\uD83E\uDD86' }
     };
-    const NAMES = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' };
+    const NAMES = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn', d: 'Duck' };
     const SIDE = { w: 'White', b: 'Black' };
     const FOUR_SIDE = { r: 'Red', b: 'Blue', y: 'Yellow', g: 'Green' };
     const FOUR_ORDER = ['r', 'b', 'y', 'g'];
@@ -1128,6 +1144,7 @@
       { id: 'atomic', name: 'Atomic' },
       { id: 'chess', name: 'Chess' },
       { id: 'crazyhouse', name: 'Crazyhouse' },
+      { id: 'duck', name: 'Duck Chess' },
       { id: 'dark', name: 'Dark Chess' },
       { id: 'kinghill', name: 'King of the Hill' },
       { id: 'memory', name: 'Memory Chess' },
@@ -1153,6 +1170,7 @@
       atomic: document.getElementById('rules-atomic'),
       chess: document.getElementById('rules-chess'),
       crazyhouse: document.getElementById('rules-crazyhouse'),
+      duck: document.getElementById('rules-duck'),
       memory: document.getElementById('rules-memory'),
       dark: document.getElementById('rules-dark'),
       kinghill: document.getElementById('rules-kinghill'),
@@ -1207,6 +1225,7 @@
     let phase = null;
     let selected = null;
     let selectedDrop = null;
+    let selectedDuckMove = null;
     let pending = { w: null, b: null };
     let choosingPromotion = false;
     let animationToken = 0;
@@ -1244,6 +1263,7 @@
     const isDark = () => gameKind === 'dark';
     const isMemory = () => gameKind === 'memory';
     const isCrazyhouse = () => gameKind === 'crazyhouse';
+    const isDuck = () => gameKind === 'duck';
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
@@ -1307,7 +1327,7 @@
 
     function positionKey(g = game, board = g.board) {
       const pieces = board.map(row => row.map(piece => piece
-        ? `${piece.c}${piece.t}${piece.promoted ? '+' : ''}${piece.delayed ? '!' : ''}`
+        ? `${piece.c}${piece.t}${piece.promoted ? '+' : ''}${piece.delayed ? '!' : ''}${piece.duckOwner || ''}`
         : '.').join('')).join('/');
       if (isFour()) {
         return JSON.stringify([pieces, g.turn, g.states, g.castling, g.enPassant]);
@@ -1361,6 +1381,7 @@
       phase = 'select';
       selected = null;
       selectedDrop = null;
+      selectedDuckMove = null;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -1538,6 +1559,7 @@
       phase = 'select';
       selected = null;
       selectedDrop = null;
+      selectedDuckMove = null;
       pending = { w: null, b: null };
       choosingPromotion = false;
       promoEl.hidden = true;
@@ -3175,7 +3197,7 @@
           const tr = r + dir, tc = c + dc;
           if (!inBounds(tr, tc)) continue;
           const target = board[tr][tc];
-          if (target && target.c !== piece.c) {
+          if (target && target.t !== 'd' && target.c !== piece.c) {
             add(tr, tc);
           } else if (!target) {
             const ep = g.enPassant.find(e => e.color !== piece.c && e.square[0] === tr && e.square[1] === tc);
@@ -3188,7 +3210,7 @@
           : [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
         for (const [dr, dc] of steps) {
           const tr = r + dr, tc = c + dc;
-          if (inBounds(tr, tc) && (!board[tr][tc] || board[tr][tc].c !== piece.c)) add(tr, tc);
+          if (inBounds(tr, tc) && (!board[tr][tc] || (board[tr][tc].t !== 'd' && board[tr][tc].c !== piece.c))) add(tr, tc);
         }
         if (piece.t === 'k') {
           const home = piece.c === 'w' ? 7 : 0;
@@ -3213,7 +3235,7 @@
           let tr = r + dr, tc = c + dc;
           while (inBounds(tr, tc)) {
             if (board[tr][tc]) {
-              if (board[tr][tc].c !== piece.c) add(tr, tc);
+              if (board[tr][tc].t !== 'd' && board[tr][tc].c !== piece.c) add(tr, tc);
               break;
             }
             add(tr, tc);
@@ -3276,6 +3298,7 @@
       const color = g.board[r][c].c;
       const moves = pseudoMoves(g, r, c, !isDark());
       if (isDark()) return moves;
+      if (isDuck()) return moves.filter(move => duckMoveLeavesKingSafe(move, color, g.board));
       return moves.filter(m => {
         const next = applySingleMove(g.board, m);
         if (isAtomic()) {
@@ -3284,6 +3307,41 @@
         }
         return !inCheck(next, color);
       });
+    }
+
+    function duckPlacementBoard(move, color, duckSquare = null, baseBoard = game.board) {
+      const adjustedMove = move && duckSquare
+        ? stopMoveBeforeDuck(baseBoard, move, [duckSquare]).move
+        : move;
+      const board = cloneBoard(baseBoard);
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece && piece.t === 'd' && (!isSimultaneous() || piece.duckOwner === color || piece.duckOwner === 'shared')) {
+            board[r][c] = null;
+          }
+        }
+      }
+      return adjustedMove ? applySingleMove(board, adjustedMove) : board;
+    }
+
+    function duckPlacementSquares(move, color, baseBoard = game.board) {
+      const squares = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (!duckPlacementBoard(move, color, [r, c], baseBoard)[r][c]) squares.push([r, c]);
+        }
+      }
+      return squares;
+    }
+
+    function duckMoveLeavesKingSafe(move, color, baseBoard) {
+      for (const [r, c] of duckPlacementSquares(move, color, baseBoard)) {
+        const board = duckPlacementBoard(move, color, [r, c], baseBoard);
+        board[r][c] = { t: 'd', c: 'n', id: -1, duckOwner: isSimultaneous() ? color : 'shared' };
+        if (!inCheck(board, color)) return true;
+      }
+      return false;
     }
 
     function crazyhouseDropAllowed(board, color, type, r, c) {
@@ -3361,11 +3419,67 @@
         const letter = move.dropType === 'p' ? '' : move.dropType.toUpperCase();
         return `${letter}@${squareName([move.tr, move.tc])}`;
       }
+      const duckText = move.duckTo ? `, Duck@${squareName(move.duckTo)}` : '';
       const piece = board[move.fr][move.fc];
-      if (move.castle) return move.castle === 'K' ? 'O-O' : 'O-O-O';
+      if (move.castle) return `${move.castle === 'K' ? 'O-O' : 'O-O-O'}${duckText}`;
       const letter = piece.t === 'p' ? '' : (piece.t === 'n' ? 'N' : piece.t.toUpperCase());
       const promo = move.promo && piece.t === 'p' && (move.tr === 0 || move.tr === 7) ? '=' + move.promo.toUpperCase() : '';
-      return `${letter}${squareName([move.fr, move.fc])}-${squareName([move.tr, move.tc])}${promo}`;
+      return `${letter}${squareName([move.fr, move.fc])}-${squareName([move.tr, move.tc])}${promo}${duckText}`;
+    }
+
+    function stopMoveBeforeDuck(board, move, duckSquares) {
+      if (!move || !duckSquares || !duckSquares.length) return { move, stopped: false };
+      const piece = board[move.fr][move.fc];
+      if (!piece) return { move: null, stopped: false };
+      const hitsDuck = squares => squares.some(([r, c]) => duckSquares.some(([dr, dc]) => dr === r && dc === c));
+      if (move.castle) {
+        const rookFrom = move.castle === 'K' ? 7 : 0;
+        const rookTo = move.castle === 'K' ? 5 : 3;
+        const kingPath = [[move.fr, move.fc + (move.tc > move.fc ? 1 : -1)], [move.tr, move.tc]];
+        const rookPath = [];
+        const step = Math.sign(rookTo - rookFrom);
+        for (let c = rookFrom + step; ; c += step) {
+          rookPath.push([move.fr, c]);
+          if (c === rookTo) break;
+        }
+        return hitsDuck([...kingPath, ...rookPath])
+          ? { move: null, stopped: true } : { move, stopped: false };
+      }
+      const path = buildPath(move, piece);
+      const hit = path.findIndex(([r, c]) => duckSquares.some(([dr, dc]) => dr === r && dc === c));
+      if (hit < 0) return { move, stopped: false };
+      if (hit === 0) return { move: null, stopped: true };
+      const [tr, tc] = path[hit - 1];
+      return {
+        move: { ...move, tr, tc, double: false, enPassant: false, castle: null },
+        stopped: true
+      };
+    }
+
+    function placeDuck(board, r, c, owner, id = null) {
+      if (!inBounds(r, c) || board[r][c]) return false;
+      board[r][c] = { t: 'd', c: 'n', id: id || nextId++, duckOwner: owner, delayed: false };
+      return true;
+    }
+
+    function applyDuckMoves(board, selections) {
+      if (!isDuck()) return;
+      const ids = new Map();
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        if (board[r][c] && board[r][c].t === 'd') {
+          ids.set(board[r][c].duckOwner, board[r][c].id);
+          board[r][c] = null;
+        }
+      }
+      const placed = new Set();
+      for (const sel of selections) {
+        if (!sel.duckTo) continue;
+        const [r, c] = sel.duckTo;
+        const key = `${r},${c}`;
+        if (placed.has(key)) continue;
+        const owner = sel.duckColor || 'shared';
+        if (placeDuck(board, r, c, owner, ids.get(owner))) placed.add(key);
+      }
     }
 
     // Resolves both selected moves at once, advancing every moving piece one square per tick.
@@ -3377,16 +3491,21 @@
       const captured = [];
       const captureCenters = [];
       const movers = [];
+      const selectedDuckSquares = isDuck() ? selections.map(sel => sel.duckTo).filter(Boolean) : [];
 
       for (const sel of selections) {
         const piece = board[sel.fr][sel.fc];
+        const duckImpact = isDuck() ? stopMoveBeforeDuck(board, sel, selectedDuckSquares) : { move: sel, stopped: false };
+        const travelMove = duckImpact.move;
+        const path = travelMove ? buildPath(travelMove, piece) : [];
         movers.push({
           piece, color: piece.c, sel, main: true,
-          pos: [sel.fr, sel.fc], path: buildPath(sel, piece), idx: 0,
-          alive: true, done: false,
-          targetsPiece: !!board[sel.tr][sel.tc]
+          pos: [sel.fr, sel.fc], path, idx: 0,
+          alive: true, done: !path.length,
+          targetsPiece: !!(travelMove && board[travelMove.tr][travelMove.tc]),
+          duckStopped: duckImpact.stopped
         });
-        if (sel.castle) {
+        if (sel.castle && !duckImpact.stopped) {
           const rookFrom = sel.castle === 'K' ? 7 : 0;
           const rookTo = sel.castle === 'K' ? 5 : 3;
           movers.push({
@@ -3407,6 +3526,10 @@
       const label = m => `${SIDE[m.color]}'s ${NAMES[m.piece.t]}`;
       const pieceLabel = p => `${SIDE[p.c]}'s ${NAMES[p.t]}`;
       const moverAt = sq => movers.find(m => m.alive && sameSquare(m.pos, sq));
+
+      for (const m of movers) {
+        if (m.main && m.duckStopped) events.push(`${label(m)} stopped before a duck.`);
+      }
 
       const removeMover = m => {
         m.alive = false;
@@ -3431,11 +3554,12 @@
         const b = selections[1 - i];
         return a.tr === b.fr && a.tc === b.fc;
       });
-      if (startTogether && mutual()) {
+      if (startTogether && mutual() && !movers.some(m => m.main && m.duckStopped)) {
         const mw = mainOf('w'), mb = mainOf('b');
         events.push(`${label(mw)} and ${label(mb)} tried to capture each other: both are captured.`);
         removeMover(mw);
         removeMover(mb);
+        applyDuckMoves(board, selections);
         frames.push(cloneBoard(board));
         return { board, frames, events, capturers, captured, enPassant: [] };
       }
@@ -3511,7 +3635,7 @@
               m.done = true;
             }
           } else {
-            if (!target && isFinal(m) && m.targetsPiece) {
+            if (!target && isFinal(m) && m.targetsPiece && !m.duckStopped) {
               events.push(`${label(m)} missed: its target already left ${squareName(sq)}.`);
             }
             place(m, sq);
@@ -3565,6 +3689,11 @@
         if (destroyed.length) events.push(`Atomic explosion on ${squareName([cr, cc])}.`);
       }
       if (captureCenters.length) frames.push(cloneBoard(board));
+
+      if (isDuck()) {
+        applyDuckMoves(board, selections);
+        frames.push(cloneBoard(board));
+      }
 
       return { board, frames, events, capturers, captured, enPassant };
     }
@@ -3669,6 +3798,18 @@
       }
       const actor = activeColor();
       const piece = game.board[r][c];
+      if (isDuck() && selectedDuckMove) {
+        const allowed = duckPlacementSquares(selectedDuckMove.move, actor);
+        if (allowed.some(([dr, dc]) => dr === r && dc === c)) {
+          const chosen = { ...selectedDuckMove.move, duckTo: [r, c], duckColor: actor };
+          const promo = selectedDuckMove.promo;
+          selectedDuckMove = null;
+          lockIn(chosen, promo);
+        } else {
+          setStatus('Choose a vacant square for the duck.', true);
+        }
+        return;
+      }
       if (isCrazyhouse() && selectedDrop) {
         const reserve = game.captured[actor].find(item => item.id === selectedDrop.id);
         if (reserve && crazyhouseDropAllowed(game.board, actor, reserve.t, r, c)) {
@@ -3690,6 +3831,10 @@
           if (moving.t === 'p' && (move.tr === 0 || move.tr === 7)) {
             render();
             askPromotion(move);
+          } else if (isDuck()) {
+            selectedDuckMove = { move, promo: 'q' };
+            setStatus('Choose a vacant square for the duck.');
+            render();
           } else {
             lockIn(move, 'q');
           }
@@ -3729,7 +3874,13 @@
         btn.addEventListener('click', () => {
           promoEl.hidden = true;
           choosingPromotion = false;
-          lockIn(move, t);
+          if (isDuck()) {
+            selectedDuckMove = { move, promo: t };
+            setStatus('Choose a vacant square for the duck.');
+            render();
+          } else {
+            lockIn(move, t);
+          }
         });
         promoEl.appendChild(btn);
       }
@@ -3937,6 +4088,10 @@
         applyCrazyhouseDropMove(move);
         return;
       }
+      if (isDuck()) {
+        const color = game.board[move.fr][move.fc] && game.board[move.fr][move.fc].c;
+        if (!move.duckTo || !duckPlacementSquares(move, color).some(([r, c]) => r === move.duckTo[0] && c === move.duckTo[1])) return;
+      }
       selectedDrop = null;
       syncClock();
       const before = game.board;
@@ -3945,9 +4100,12 @@
       const quiet = isDark() && incoming;
       const atomic = isAtomic();
       const lines = [quiet ? `${SIDE[moving.c]} moved.` : moveText(before, move)];
+      const duckImpact = isDuck() ? stopMoveBeforeDuck(before, move, [move.duckTo]) : { move, stopped: false };
+      const actualMove = duckImpact.move;
+      if (duckImpact.stopped) lines.push('The piece stopped before the duck.');
 
-      const target = before[move.tr][move.tc];
-      const enPassantVictim = move.enPassant ? before[move.victim[0]][move.victim[1]] : null;
+      const target = actualMove && before[actualMove.tr][actualMove.tc];
+      const enPassantVictim = actualMove && actualMove.enPassant ? before[actualMove.victim[0]][actualMove.victim[1]] : null;
       if (target) {
         if (!atomic) storeCapturedPiece(opponent(target.c), target);
         if (!quiet) lines.push(`${SIDE[moving.c]}'s ${NAMES[fromType]} captured ${SIDE[target.c]}'s ${NAMES[target.t]} on ${squareName([move.tr, move.tc])}.`);
@@ -3956,19 +4114,19 @@
         if (!atomic) storeCapturedPiece(opponent(enPassantVictim.c), enPassantVictim);
         if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn captured ${SIDE[enPassantVictim.c]}'s Pawn en passant.`);
       }
-      if (move.castle && !quiet) {
-        lines.push(`${SIDE[moving.c]} castles ${move.castle === 'K' ? 'kingside' : 'queenside'}.`);
+      if (actualMove && actualMove.castle && !quiet) {
+        lines.push(`${SIDE[moving.c]} castles ${actualMove.castle === 'K' ? 'kingside' : 'queenside'}.`);
       }
 
-      game.board = applySingleMove(before, move);
-      if (fromType === 'p' && (move.tr === 0 || move.tr === 7)) {
-        moving.t = move.promo || 'q';
+      game.board = actualMove ? applySingleMove(before, actualMove) : cloneBoard(before);
+      if (actualMove && fromType === 'p' && (actualMove.tr === 0 || actualMove.tr === 7)) {
+        moving.t = actualMove.promo || 'q';
         if (isCrazyhouse()) moving.promoted = true;
         if (!quiet) lines.push(`${SIDE[moving.c]}'s Pawn promoted to a ${NAMES[moving.t]}.`);
       }
 
       if (atomic && (target || enPassantVictim)) {
-        const destroyed = atomicExplode(before, game.board, move);
+        const destroyed = atomicExplode(before, game.board, actualMove);
         for (const p of destroyed) game.captured[opponent(p.c)].push(p);
         if (!quiet && destroyed.length) {
           lines.push(`Explosion destroyed ${destroyed.map(p => `${SIDE[p.c]}'s ${NAMES[p.t]}`).join(', ')}.`);
@@ -3982,12 +4140,19 @@
       }
 
       game.enPassant = [];
-      if (fromType === 'p' && move.double) {
+      if (actualMove && fromType === 'p' && actualMove.double) {
         game.enPassant = [{
           color: moving.c,
-          square: [(move.fr + move.tr) / 2, move.fc],
-          victim: [move.tr, move.tc]
+          square: [(actualMove.fr + actualMove.tr) / 2, actualMove.fc],
+          victim: [actualMove.tr, actualMove.tc]
         }];
+      }
+
+      if (isDuck()) {
+        applyDuckMoves(game.board, [{ duckTo: move.duckTo, duckColor: 'shared' }]);
+        if (!game.board.flat().some(piece => piece && piece.t === 'd')) {
+          lines.push('The duck could not be placed because that square is occupied.');
+        }
       }
 
       game.lastMoves = [move];
@@ -4099,7 +4264,7 @@
       }
       if (isThreefoldRepetition(board)) return 'Threefold Repetition - Draw';
       if (isDark()) return null;
-      if (board.flat().every(p => !p || p.t === 'k')) return 'Only Kings Left - Stalemate';
+      if (board.flat().every(p => !p || p.t === 'k' || p.t === 'd')) return 'Only Kings Left - Stalemate';
       const g = { ...game, board };
       const stuck = { w: !hasAnyLegalMove(g, 'w'), b: !hasAnyLegalMove(g, 'b') };
       const mated = { w: stuck.w && inCheck(board, 'w'), b: stuck.b && inCheck(board, 'b') };
@@ -4187,6 +4352,7 @@
       handoff = false;
       handoffEl.hidden = true;
       selected = null;
+      selectedDuckMove = null;
       choosingPromotion = false;
       promoEl.hidden = true;
       reviewing = true;
@@ -4199,6 +4365,7 @@
       reviewing = false;
       reviewIndex = 0;
       selected = null;
+      selectedDuckMove = null;
       reviewBarEl.hidden = true;
       const last = game && game.history && game.history[game.history.length - 1];
       if (last) setLog(last.lines);
@@ -4233,6 +4400,9 @@
       const dropTargets = selectedReserve && !entry && phase === 'select'
         ? new Set(crazyhouseDropSquares(selectedDrop.color, selectedReserve.t).map(([r, c]) => r * 8 + c))
         : new Set();
+      const duckTargets = isDuck() && selectedDuckMove && !entry && phase === 'select'
+        ? new Set(duckPlacementSquares(selectedDuckMove.move, activeColor()).map(([r, c]) => r * 8 + c))
+        : new Set();
       const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(board, c)).map(c => findKing(board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
@@ -4246,7 +4416,7 @@
           if (fogged) sq.classList.add('fog');
           if ((!dark || entry) && lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
-          if (dropTargets.has(r * 8 + c)) sq.classList.add('target');
+          if (dropTargets.has(r * 8 + c) || duckTargets.has(r * 8 + c)) sq.classList.add('target');
           if (checked.some(k => k[0] === r && k[1] === c)) sq.classList.add('in-check');
           const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
           if (target) {
@@ -4256,8 +4426,8 @@
           const piece = board[r][c];
           if (piece && !fogged) {
             const span = document.createElement('span');
-            span.className = 'piece ' + piece.c;
-            span.textContent = isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t];
+            span.className = piece.t === 'd' ? 'piece duck' : 'piece ' + piece.c;
+            span.textContent = piece.t === 'd' ? GLYPHS.w.d : (isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t]);
             sq.appendChild(span);
             if (piece.delayed && hideMoves) {
               const badge = document.createElement('span');
