@@ -452,6 +452,45 @@
       font-size: clamp(2rem, 9vw, 3.6rem);
     }
 
+    .board.cats {
+      grid-template-columns: repeat(7, 1fr);
+      grid-template-rows: repeat(7, 1fr);
+      width: min(100%, 480px);
+    }
+
+    .board.cats .square { font-size: clamp(2rem, 9vw, 3.6rem); }
+    .board.cats .piece.w { color: #f4f4f5; text-shadow: 0 2px 3px #111; }
+    .board.cats .piece.b { color: #24243a; text-shadow: 0 1px 1px #fff; }
+    .board.rowcall {
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      width: 100%;
+      height: 100%;
+      aspect-ratio: auto;
+    }
+    .board.rowcall .square { font-size: clamp(2.2rem, 10vw, 4rem); }
+    .row-call-layout { display: contents; }
+    .row-call-layout.active {
+      display: grid;
+      grid-template-columns: 40px repeat(4, minmax(0, 1fr));
+      grid-template-rows: 40px repeat(4, minmax(0, 1fr));
+      width: min(100%, 480px);
+      aspect-ratio: 1;
+    }
+    .row-call-layout.active .board.rowcall { grid-column: 2 / 6; grid-row: 2 / 6; }
+    .row-call-top, .row-call-left { display: grid; visibility: hidden; gap: 0; }
+    .row-call-layout.choosing-line .row-call-top, .row-call-layout.choosing-line .row-call-left { visibility: visible; }
+    .row-call-top { grid-column: 2 / 6; grid-row: 1; grid-template-columns: repeat(4, 1fr); margin-inline: 4px; }
+    .row-call-left { grid-column: 1; grid-row: 2 / 6; grid-template-rows: repeat(4, 1fr); margin-block: 4px; }
+    .row-call-top button, .row-call-left button {
+      width: 100%; height: 100%; padding: 0; background: var(--accent); color: white;
+      border: 0; border-radius: 6px; font: inherit; font-weight: 700; cursor: pointer;
+    }
+    .row-call-top button:hover, .row-call-left button:hover,
+    .row-call-top button:focus-visible, .row-call-left button:focus-visible { filter: brightness(1.15); }
+    .row-call-top button:disabled, .row-call-left button:disabled { visibility: hidden; cursor: default; }
+    .game-menu-heading { padding: 0.6rem 0.8rem 0.25rem; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
     .board.four .piece.b {
       color: #5aa9ff;
       text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 1px #000;
@@ -969,7 +1008,11 @@
         </div>
       </div>
       <div class="captured" id="captured-by-black"></div>
-      <div class="board" id="board"></div>
+      <div class="row-call-layout" id="row-call-layout">
+        <div class="row-call-top" id="row-call-top"></div>
+        <div class="row-call-left" id="row-call-left"></div>
+        <div class="board" id="board"></div>
+      </div>
       <div class="captured" id="captured-by-white"></div>
       <div class="extra-controls" id="extra-controls" hidden>
         <button class="btn" id="resign-btn" type="button">Resign</button>
@@ -1117,6 +1160,24 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-cats" hidden>
+      <h2>How Cats and Dogs Works</h2>
+      <ul>
+        <li>Play on a 7&times;7 board. Players take turns placing Xs and Os on empty squares.</li>
+        <li>You may not place a mark next to an opponent&rsquo;s mark, including diagonally.</li>
+        <li>The last player who can make a legal placement wins.</li>
+      </ul>
+    </div>
+
+    <div class="rules-panel" id="rules-rowcall" hidden>
+      <h2>How Row Call Works</h2>
+      <ul>
+        <li>Play on a 4&times;4 grid and try to make three of your marks in a row, column, or diagonal.</li>
+        <li>On your turn, choose an available row or column. Your opponent then chooses an empty square in that line, where your X or O is placed.</li>
+        <li>The player who chose the square chooses the next row or column. The first player to make three in a row wins; if the board fills first, the game is a draw.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-four" hidden>
       <h2>How 4P Chess Works</h2>
       <ul>
@@ -1193,6 +1254,7 @@
     const FOUR_JOIN_ORDER = ['y', 'b', 'g'];
     const FOUR_SIZE = 14;
     const TEEKO_SIZE = 5;
+    const CATS_SIZE = 7;
     const TEEKO_PIECES = 4;
     // Standard back ranks as seen from each player's own left to right.
     // White-team players have the king to the right of the queen; black-team
@@ -1204,23 +1266,21 @@
     const TICK_MS = 450;
     const PEER_PREFIX = 'syncchess-';
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const GAMES = [
-      { id: 'four', name: '4P Chess' },
-      { id: 'fourteam', name: '4P Teams' },
-      { id: 'fourteam2', name: '4P Teams (2P)' },
-      { id: 'atomic', name: 'Atomic' },
-      { id: 'chess', name: 'Chess' },
-      { id: 'crazyhouse', name: 'Crazyhouse' },
-      { id: 'duck', name: 'Duck Chess' },
-      { id: 'dark', name: 'Dark Chess' },
-      { id: 'kinghill', name: 'King of the Hill' },
-      { id: 'memory', name: 'Memory Chess' },
-      { id: 'amazons', name: 'Amazons' },
-      { id: 'pferde', name: 'Pferdeäppel' },
-      { id: 'sync', name: 'Sync Chess' },
-      { id: 'teeko', name: 'Teeko' },
-      { id: 'threecheck', name: 'Three-Check' }
+    const GAME_GROUPS = [
+      { name: 'Chess Variants', games: [
+        { id: 'four', name: '4P Chess' }, { id: 'fourteam', name: '4P Teams' },
+        { id: 'fourteam2', name: '4P Teams (2P)' }, { id: 'atomic', name: 'Atomic' },
+        { id: 'chess', name: 'Chess' }, { id: 'crazyhouse', name: 'Crazyhouse' },
+        { id: 'dark', name: 'Dark Chess' }, { id: 'duck', name: 'Duck Chess' },
+        { id: 'memory', name: 'Memory Chess' }, { id: 'sync', name: 'Sync Chess' }
+      ] },
+      { name: 'Other Games', games: [
+        { id: 'amazons', name: 'Amazons' }, { id: 'cats', name: 'Cats and Dogs' },
+        { id: 'pferde', name: 'Pferdeappel' }, { id: 'rowcall', name: 'Row Call' },
+        { id: 'teeko', name: 'Teeko' }
+      ] }
     ];
+    const GAMES = GAME_GROUPS.flatMap(group => group.games);
     GLYPHS.r = GLYPHS.w;
     GLYPHS.y = GLYPHS.w;
     GLYPHS.g = GLYPHS.w;
@@ -1246,8 +1306,9 @@
       kinghill: document.getElementById('rules-kinghill'),
       sync: document.getElementById('rules-sync'),
       teeko: document.getElementById('rules-teeko'),
-      threecheck: document.getElementById('rules-threecheck')
-      , amazons: document.getElementById('rules-amazons'), pferde: document.getElementById('rules-pferde')
+      threecheck: document.getElementById('rules-threecheck'),
+      amazons: document.getElementById('rules-amazons'), pferde: document.getElementById('rules-pferde'),
+      cats: document.getElementById('rules-cats'), rowcall: document.getElementById('rules-rowcall')
     };
     const handoffEl = document.getElementById('handoff');
     const handoffTitleEl = document.getElementById('handoff-title');
@@ -1275,6 +1336,9 @@
       b: document.getElementById('clock-b')
     };
     const fourPanelEl = document.getElementById('four-panel');
+    const rowCallLayoutEl = document.getElementById('row-call-layout');
+    const rowCallTopEl = document.getElementById('row-call-top');
+    const rowCallLeftEl = document.getElementById('row-call-left');
     const extraControlsEl = document.getElementById('extra-controls');
     const resignBtnEl = document.getElementById('resign-btn');
     const claimBtnEl = document.getElementById('claim-btn');
@@ -1356,6 +1420,8 @@
     const isThreeCheck = () => gameKind === 'threecheck';
     const isAmazons = () => gameKind === 'amazons';
     const isPferde = () => gameKind === 'pferde';
+    const isCats = () => gameKind === 'cats';
+    const isRowCall = () => gameKind === 'rowcall';
     const isTeeko = () => gameKind === 'teeko';
     const botsAllowed = () => localMode && gameKind === 'chess';
     const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
@@ -1556,6 +1622,14 @@
     }
 
     function newGame(controls = null) {
+      if (isRowCall()) {
+        newRowCallGame(controls);
+        return;
+      }
+      if (isCats()) {
+        newCatsGame(controls);
+        return;
+      }
       if (isTeeko()) {
         newTeekoGame(controls);
         return;
@@ -1851,6 +1925,267 @@
       startClockForTurn();
     }
 
+    function catsSquareName(r, c) { return FILES[c] + (CATS_SIZE - r); }
+
+    function catsPlacementAllowed(board, color, r, c) {
+      if (!inBounds(r, c, CATS_SIZE) || board[r][c]) return false;
+      const enemy = opponent(color);
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nr = r + dr, nc = c + dc;
+        if (inBounds(nr, nc, CATS_SIZE) && board[nr][nc] && board[nr][nc].c === enemy) return false;
+      }
+      return true;
+    }
+
+    function catsHasPlacement(board, color) {
+      for (let r = 0; r < CATS_SIZE; r++) for (let c = 0; c < CATS_SIZE; c++) {
+        if (catsPlacementAllowed(board, color, r, c)) return true;
+      }
+      return false;
+    }
+
+    function newCatsGame(controls = null) {
+      clearBotMove();
+      animationToken++;
+      const board = Array.from({ length: CATS_SIZE }, () => Array(CATS_SIZE).fill(null));
+      game = {
+        board, castling: { wK: false, wQ: false, bK: false, bQ: false }, enPassant: [],
+        lastMoves: [], captured: { w: [], b: [] }, checks: { w: 0, b: 0 }, turn: 'w', result: null,
+        clock: createClock(controls, ['w', 'b'])
+      };
+      showRematchStatus();
+      twoPlayerRematchRequests = new Set();
+      phase = 'select'; selected = null; selectedDrop = null; selectedDuckMove = null;
+      clearAwaitingHostState(); authoritativeVersion = 0; lastAuthoritativeVersion = 0;
+      guestMoveSeq = 0; lastGuestMoveSeq = 0; pending = { w: null, b: null };
+      choosingPromotion = false; promoEl.hidden = true;
+      clearTimeout(handoffTimer); handoffTimer = null; handoff = false; handoffEl.hidden = true;
+      reviewing = false; reviewIndex = 0; reviewBarEl.hidden = true; reviewBtnEl.hidden = true;
+      panelEl.hidden = false;
+      const intro = localMode ? 'White places X first. Take turns placing marks; never place beside an opponent mark.'
+        : `You are ${SIDE[myColor]}. Place a mark when it is your turn; never place beside an opponent mark.`;
+      logEl.textContent = intro;
+      game.history = [{ board: cloneBoard(board), captured: { w: [], b: [] }, lastMoves: [], lines: [intro], reviewLines: [intro], label: 'Starting Position' }];
+      game.repetitionKeys = [positionKey()];
+      updateStatus(); render(); startClockForTurn();
+    }
+
+    function applyCatsAction(move) {
+      if (!game || phase !== 'select') return;
+      const color = game.turn, r = move.tr, c = move.tc;
+      if (!catsPlacementAllowed(game.board, color, r, c)) return;
+      syncClock();
+      game.board[r][c] = { t: 'p', c: color, id: nextId++ };
+      game.lastMoves = [{ ...move }];
+      game.turn = opponent(color);
+      addIncrement(color);
+      const lines = [`${SIDE[color]} placed ${color === 'w' ? 'X' : 'O'} on ${catsSquareName(r, c)}.`];
+      if (!catsHasPlacement(game.board, game.turn)) {
+        game.result = `Cats and Dogs - ${SIDE[color]} Wins`;
+        lines.push(`${SIDE[game.turn]} has no legal placement.`);
+        phase = 'over';
+      }
+      const label = `${SIDE[color]}: ${catsSquareName(r, c)}`;
+      pushHistory(lines, label); setLog(lines); playMoveSound(false);
+      updateStatus(); render(); startClockForTurn();
+    }
+
+    function rowCallHasOpenCell(board, axis, index) {
+      for (let i = 0; i < 4; i++) {
+        const r = axis === 'row' ? index : i;
+        const c = axis === 'row' ? i : index;
+        if (!board[r][c]) return true;
+      }
+      return false;
+    }
+
+    function rowCallHasThree(board, r, c, color) {
+      for (const [dr, dc] of [[1,0],[0,1],[1,1],[1,-1]]) {
+        let count = 1;
+        for (const sign of [-1, 1]) {
+          let nr = r + dr * sign, nc = c + dc * sign;
+          while (inBounds(nr, nc, 4) && board[nr][nc] && board[nr][nc].c === color) {
+            count++; nr += dr * sign; nc += dc * sign;
+          }
+        }
+        if (count >= 3) return true;
+      }
+      return false;
+    }
+
+    function rowCallLineText(axis, index) {
+      return axis === 'row' ? `row ${index + 1}` : `column ${FILES[index].toUpperCase()}`;
+    }
+
+    function newRowCallGame(controls = null) {
+      clearBotMove(); animationToken++;
+      const board = Array.from({ length: 4 }, () => Array(4).fill(null));
+      game = {
+        board, castling: { wK: false, wQ: false, bK: false, bQ: false }, enPassant: [],
+        lastMoves: [], captured: { w: [], b: [] }, checks: { w: 0, b: 0 }, turn: 'w', result: null,
+        rowCallStage: 'line', offer: null, clock: createClock(controls, ['w', 'b'])
+      };
+      showRematchStatus(); twoPlayerRematchRequests = new Set();
+      phase = 'select'; selected = null; selectedDrop = null; selectedDuckMove = null;
+      clearAwaitingHostState(); authoritativeVersion = 0; lastAuthoritativeVersion = 0;
+      guestMoveSeq = 0; lastGuestMoveSeq = 0; pending = { w: null, b: null };
+      choosingPromotion = false; promoEl.hidden = true;
+      clearTimeout(handoffTimer); handoffTimer = null; handoff = false; handoffEl.hidden = true;
+      reviewing = false; reviewIndex = 0; reviewBarEl.hidden = true; reviewBtnEl.hidden = true;
+      panelEl.hidden = false;
+      const intro = localMode
+        ? 'White chooses a row or column. Black chooses the square for White’s mark; the square chooser picks the next line.'
+        : `You are ${SIDE[myColor]}. Choose a row or column when it is your turn.`;
+      logEl.textContent = intro;
+      game.history = [{ board: cloneBoard(board), captured: { w: [], b: [] }, lastMoves: [], lines: [intro], reviewLines: [intro], label: 'Starting Position' }];
+      game.repetitionKeys = [positionKey()];
+      updateStatus(); render(); startClockForTurn();
+    }
+
+    function applyRowCallAction(move) {
+      if (!game || phase !== 'select' || !move || !move.rowCall) return;
+      const color = game.turn;
+      if (move.rowCall === 'line') {
+        if (game.rowCallStage !== 'line' || !['row', 'column'].includes(move.axis) ||
+          !Number.isInteger(move.index) || move.index < 0 || move.index >= 4 ||
+          !rowCallHasOpenCell(game.board, move.axis, move.index)) return;
+        syncClock();
+        game.offer = { color, axis: move.axis, index: move.index };
+        game.rowCallStage = 'square';
+        game.turn = opponent(color);
+        const lines = [`${SIDE[color]} chose ${rowCallLineText(move.axis, move.index)}.`, `${SIDE[game.turn]} chooses an empty square in that line.`];
+        pushHistory(lines, `${SIDE[color]} chose ${rowCallLineText(move.axis, move.index)}`);
+        setLog(lines); updateStatus(); render(); startClockForTurn();
+        return;
+      }
+      if (move.rowCall !== 'square' || game.rowCallStage !== 'square' || !game.offer ||
+        !Number.isInteger(move.r) || !Number.isInteger(move.c) || !inBounds(move.r, move.c, 4)) return;
+      const offer = game.offer;
+      const onLine = offer.axis === 'row' ? move.r === offer.index : move.c === offer.index;
+      if (!onLine || game.board[move.r][move.c]) return;
+      syncClock();
+      const markColor = offer.color;
+      game.board[move.r][move.c] = { t: 'p', c: markColor, id: nextId++ };
+      game.lastMoves = [{ tr: move.r, tc: move.c }];
+      game.offer = null; game.rowCallStage = 'line';
+      game.turn = color;
+      addIncrement(markColor);
+      const lines = [`${SIDE[color]} chose ${FILES[move.c].toUpperCase()}${4 - move.r}; ${SIDE[markColor]} placed ${markColor === 'w' ? 'X' : 'O'}.`];
+      if (rowCallHasThree(game.board, move.r, move.c, markColor)) {
+        game.result = `Row Call - ${SIDE[markColor]} Wins`;
+        lines.push(game.result);
+      } else if (!Array.from({ length: 4 }, (_, i) => rowCallHasOpenCell(game.board, 'row', i) || rowCallHasOpenCell(game.board, 'column', i)).some(Boolean)) {
+        game.result = 'Row Call - Draw';
+        lines.push('The board is full.');
+      }
+      phase = game.result ? 'over' : 'select';
+      const label = `${SIDE[markColor]} ${markColor === 'w' ? 'X' : 'O'} on ${FILES[move.c].toUpperCase()}${4 - move.r}`;
+      pushHistory(lines, label); setLog(lines); playMoveSound(false);
+      updateStatus(); render(); startClockForTurn();
+    }
+
+    function onRowCallSquareClick(r, c) {
+      if (spectatorMode || reviewing || phase !== 'select' || handoff || awaitingHostState ||
+        (!localMode && game.turn !== myColor) || game.rowCallStage !== 'square' || !game.offer) return;
+      const inLine = game.offer.axis === 'row' ? r === game.offer.index : c === game.offer.index;
+      if (inLine && !game.board[r][c]) lockIn({ rowCall: 'square', r, c }, null);
+    }
+
+    function renderRowCall() {
+      boardEl.classList.remove('four', 'teeko', 'cats');
+      boardEl.classList.add('rowcall');
+      boardEl.innerHTML = '';
+      rowCallTopEl.innerHTML = '';
+      rowCallLeftEl.innerHTML = '';
+      rowCallLayoutEl.classList.add('active');
+      rowCallLayoutEl.classList.remove('choosing-line');
+      fourPanelEl.hidden = true; extraControlsEl.hidden = true;
+      capturedEl.w.hidden = true; capturedEl.b.hidden = true;
+      const entry = reviewing && game.history ? game.history[reviewIndex] : null;
+      const board = entry ? entry.board : game.board;
+      const offer = entry ? null : game.offer;
+      const flip = myColor === 'b' && !localMode;
+      const canChooseLine = !entry && !spectatorMode && phase === 'select' && game.rowCallStage === 'line' && (localMode || game.turn === myColor);
+      if (canChooseLine) {
+        rowCallLayoutEl.classList.add('choosing-line');
+        for (let visualCol = 0; visualCol < 4; visualCol++) {
+          const index = flip ? 3 - visualCol : visualCol;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.disabled = !rowCallHasOpenCell(board, 'column', index);
+          button.textContent = FILES[index].toUpperCase();
+          button.setAttribute('aria-label', `Choose column ${FILES[index].toUpperCase()}`);
+          button.addEventListener('click', () => lockIn({ rowCall: 'line', axis: 'column', index }, null));
+          rowCallTopEl.appendChild(button);
+        }
+        for (let visualRow = 0; visualRow < 4; visualRow++) {
+          const index = flip ? 3 - visualRow : visualRow;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.disabled = !rowCallHasOpenCell(board, 'row', index);
+          button.textContent = String(index + 1);
+          button.setAttribute('aria-label', `Choose row ${index + 1}`);
+          button.addEventListener('click', () => lockIn({ rowCall: 'line', axis: 'row', index }, null));
+          rowCallLeftEl.appendChild(button);
+        }
+      }
+      for (let vr = 0; vr < 4; vr++) for (let vc = 0; vc < 4; vc++) {
+        const r = flip ? 3 - vr : vr, c = flip ? 3 - vc : vc;
+        const sq = document.createElement('div');
+        sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
+        if (offer && (offer.axis === 'row' ? r === offer.index : c === offer.index) && !board[r][c]) sq.classList.add('target');
+        const piece = board[r][c];
+        if (piece) {
+          const span = document.createElement('span');
+          span.className = 'piece ' + piece.c;
+          span.textContent = piece.c === 'w' ? 'X' : 'O';
+          sq.appendChild(span);
+        }
+        sq.addEventListener('click', () => onRowCallSquareClick(r, c));
+        boardEl.appendChild(sq);
+      }
+      updateClockDisplay();
+    }
+
+    function onCatsSquareClick(r, c) {
+      if (spectatorMode || reviewing || phase !== 'select' || handoff || awaitingHostState ||
+        (!localMode && game.turn !== myColor)) return;
+      if (!catsPlacementAllowed(game.board, game.turn, r, c)) return;
+      lockIn({ cats: true, tr: r, tc: c }, null);
+    }
+
+    function renderCats() {
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
+      boardEl.classList.remove('four', 'teeko');
+      boardEl.classList.add('cats');
+      boardEl.innerHTML = '';
+      fourPanelEl.hidden = true; extraControlsEl.hidden = true;
+      capturedEl.w.hidden = true; capturedEl.b.hidden = true;
+      const entry = reviewing && game.history ? game.history[reviewIndex] : null;
+      const board = entry ? entry.board : game.board;
+      const lastMoves = entry ? entry.lastMoves : game.lastMoves;
+      const flip = myColor === 'b' && !localMode;
+      for (let vr = 0; vr < CATS_SIZE; vr++) for (let vc = 0; vc < CATS_SIZE; vc++) {
+        const r = flip ? CATS_SIZE - 1 - vr : vr, c = flip ? CATS_SIZE - 1 - vc : vc;
+        const sq = document.createElement('div');
+        sq.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light');
+        if (lastMoves.some(m => m.tr === r && m.tc === c)) sq.classList.add('last-move');
+        const available = !entry && phase === 'select' && (localMode || game.turn === myColor) && catsPlacementAllowed(board, game.turn, r, c);
+        if (available) sq.classList.add('target');
+        const piece = board[r][c];
+        if (piece) {
+          const span = document.createElement('span');
+          span.className = 'piece ' + piece.c;
+          span.textContent = piece.c === 'w' ? 'X' : 'O';
+          sq.appendChild(span);
+        }
+        sq.addEventListener('click', () => onCatsSquareClick(r, c));
+        boardEl.appendChild(sq);
+      }
+      updateClockDisplay();
+    }
+
     function onTeekoSquareClick(r, c) {
       if (spectatorMode) return;
       if (reviewing || phase !== 'select' || handoff) return;
@@ -1879,7 +2214,9 @@
     }
 
     function renderTeeko() {
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
       boardEl.classList.remove('four');
+      boardEl.classList.remove('cats');
       boardEl.classList.add('teeko');
       boardEl.innerHTML = '';
       fourPanelEl.hidden = true;
@@ -3309,7 +3646,9 @@
     }
 
     function renderFour() {
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
       boardEl.classList.remove('teeko');
+      boardEl.classList.remove('cats');
       boardEl.classList.add('four');
       boardEl.innerHTML = '';
       fourPanelEl.hidden = false;
@@ -4248,6 +4587,21 @@
 
     function updateStatus() {
       if (!game) return;
+      if (isRowCall()) {
+        if (phase === 'over') setStatus(game.result);
+        else if (spectatorMode) setStatus(`Spectating · ${SIDE[game.turn]} ${game.rowCallStage === 'line' ? 'chooses a line' : 'chooses a square'}`);
+        else if (game.rowCallStage === 'line') setStatus(`${SIDE[game.turn]}: Choose a row or column`);
+        else setStatus(`${SIDE[game.turn]}: Choose a square in ${rowCallLineText(game.offer.axis, game.offer.index)}`);
+        return;
+      }
+      if (isCats()) {
+        if (phase === 'over') setStatus(game.result);
+        else if (spectatorMode) setStatus(`Spectating · ${SIDE[game.turn]} to place`);
+        else if (localMode) setStatus(`${SIDE[game.turn]} to place ${game.turn === 'w' ? 'X' : 'O'}`);
+        else if (game.turn === myColor) setStatus(`Your turn to place ${myColor === 'w' ? 'X' : 'O'}`);
+        else setStatus('Waiting for Opponent...');
+        return;
+      }
       if (isTeeko()) {
         const placing = game.stage === 'placement';
         if (phase === 'over') { setStatus(game.result); return; }
@@ -4347,6 +4701,14 @@
 
     function onSquareClick(r, c) {
       const piece = game && game.board[r][c];
+      if (isRowCall()) {
+        onRowCallSquareClick(r, c);
+        return;
+      }
+      if (isCats()) {
+        onCatsSquareClick(r, c);
+        return;
+      }
       if (isTeeko()) {
         onTeekoSquareClick(r, c);
         return;
@@ -4742,6 +5104,14 @@
 
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
     function applyStandardMove(move, incoming = false) {
+      if (move && move.rowCall) {
+        applyRowCallAction(move);
+        return;
+      }
+      if (move && move.cats) {
+        applyCatsAction(move);
+        return;
+      }
       if (move && (move.amazon || move.pferde)) {
         const color = game.turn;
         const moving = game.board[move.fr] && game.board[move.fr][move.fc];
@@ -5083,6 +5453,14 @@
 
     function render() {
       if (!game) return;
+      if (isRowCall()) {
+        renderRowCall();
+        return;
+      }
+      if (isCats()) {
+        renderCats();
+        return;
+      }
       if (isTeeko()) {
         renderTeeko();
         return;
@@ -5091,8 +5469,10 @@
         renderFour();
         return;
       }
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
       boardEl.classList.remove('four');
       boardEl.classList.remove('teeko');
+      boardEl.classList.remove('cats');
       fourPanelEl.hidden = true;
       extraControlsEl.hidden = true;
       capturedEl.w.hidden = false;
@@ -5977,12 +6357,12 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync' || gameKind === 'teeko' || isAmazons() || isPferde();
-      memoryModeOptionEl.hidden = gameKind === 'memory' || gameKind === 'teeko' || isAmazons() || isPferde();
+      syncModeOptionEl.hidden = gameKind === 'sync' || gameKind === 'teeko' || isAmazons() || isPferde() || isCats() || isRowCall();
+      memoryModeOptionEl.hidden = gameKind === 'memory' || gameKind === 'teeko' || isAmazons() || isPferde() || isCats() || isRowCall();
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
-      syncModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && simultaneousMode;
-      memoryModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && memoryMode;
+      syncModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && simultaneousMode;
+      memoryModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && memoryMode;
       if (showBots) {
         // Bots play normal chess only, so keep Sync mode and bots exclusive.
         const botBoxes = [...timeFieldsEl.querySelectorAll('.time-bot-input')];
@@ -6050,22 +6430,29 @@
       nextBtnEl.setAttribute('aria-label', `Next game: ${next.name}`);
       prevNameEl.setAttribute('aria-label', `Switch to previous game: ${prev.name}`);
       nextNameEl.setAttribute('aria-label', `Switch to next game: ${next.name}`);
-      for (const g of GAMES) rulesEl[g.id].hidden = g.id !== gameKind;
+      for (const [id, rules] of Object.entries(rulesEl)) rules.hidden = id !== gameKind;
       if (!menuEl.hidden) buildMenu();
     }
 
     function buildMenu() {
       menuEl.innerHTML = '';
-      for (const g of GAMES) {
-        const item = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = g.name;
-        btn.setAttribute('role', 'option');
-        btn.setAttribute('aria-selected', String(g.id === gameKind));
-        btn.addEventListener('click', () => selectGame(g.id));
-        item.appendChild(btn);
-        menuEl.appendChild(item);
+      for (const group of GAME_GROUPS) {
+        const heading = document.createElement('li');
+        heading.className = 'game-menu-heading';
+        heading.setAttribute('role', 'presentation');
+        heading.textContent = group.name;
+        menuEl.appendChild(heading);
+        for (const g of group.games) {
+          const item = document.createElement('li');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = g.name;
+          btn.setAttribute('role', 'option');
+          btn.setAttribute('aria-selected', String(g.id === gameKind));
+          btn.addEventListener('click', () => selectGame(g.id));
+          item.appendChild(btn);
+          menuEl.appendChild(item);
+        }
       }
     }
 
@@ -6100,6 +6487,9 @@
       capturedEl.b.hidden = false;
       boardEl.classList.remove('four');
       boardEl.classList.remove('teeko');
+      boardEl.classList.remove('cats');
+      boardEl.classList.remove('rowcall');
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
       logEl.textContent = '';
       setStatus('Host or join a game');
     }
@@ -6193,9 +6583,9 @@
           })
           .map(row => row.dataset.color))
         : new Set();
-      simultaneousMode = gameKind === 'sync' || (!isTeeko() && !isAmazons() && !isPferde() && syncModeInputEl.checked);
+      simultaneousMode = gameKind === 'sync' || (!isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && syncModeInputEl.checked);
       if (chosenBots.size) simultaneousMode = false;
-      memoryMode = gameKind !== 'memory' && !isTeeko() && !isAmazons() && !isPferde() && memoryModeInputEl.checked;
+      memoryMode = gameKind !== 'memory' && !isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && memoryModeInputEl.checked;
       botSeats = chosenBots;
       timeModalEl.hidden = true;
       pendingAction = null;
