@@ -2146,6 +2146,7 @@
         boardEl.appendChild(sq);
       }
       updateClockDisplay();
+      updateTwoPlayerResignControl(entry);
     }
 
     function onCatsSquareClick(r, c) {
@@ -2184,6 +2185,7 @@
         boardEl.appendChild(sq);
       }
       updateClockDisplay();
+      updateTwoPlayerResignControl(entry);
     }
 
     function onTeekoSquareClick(r, c) {
@@ -2262,6 +2264,7 @@
         reviewFirstEl.disabled = reviewPrevEl.disabled = reviewIndex === 0;
         reviewNextEl.disabled = reviewLastEl.disabled = reviewIndex === total;
       }
+      updateTwoPlayerResignControl(entry);
     }
 
     // ---------------------------------------------------------------------
@@ -4585,6 +4588,62 @@
       turnEl.classList.toggle('error', isError);
     }
 
+    function updateTwoPlayerResignControl(entry = null) {
+      if (isFour()) return;
+      const canAct = isSimultaneous()
+        ? !pending[myColor]
+        : localMode || game.turn === myColor;
+      const show = !!game && !entry && phase === 'select' && !spectatorMode && !awaitingHostState &&
+        (localMode || !!conn) && canAct && !(botActive() && botSeats.has(game.turn));
+      extraControlsEl.hidden = !show;
+      resignBtnEl.hidden = !show;
+      claimBtnEl.hidden = true;
+    }
+
+    function finishTwoPlayerResignation(color, incoming = false) {
+      if (!game || phase !== 'select' || !['w', 'b'].includes(color)) return;
+      if (isSimultaneous() && pending[color]) return;
+      if (game.clock) {
+        syncClock();
+        if (game.clock.remaining[color] <= 0) {
+          finishNetworkTimeout(color);
+          return;
+        }
+        game.clock.active = [];
+      }
+      const winner = opponent(color);
+      game.result = `${currentGame().name} - ${SIDE[winner]} Wins (Resignation)`;
+      phase = 'over';
+      pending = { w: null, b: null };
+      selected = null;
+      selectedDrop = null;
+      selectedDuckMove = null;
+      clearAwaitingHostState();
+      const lines = [`${SIDE[color]} resigned.`, game.result];
+      pushHistory(lines, 'Resignation');
+      setLog(lines);
+      updateStatus();
+      render();
+      startClockForTurn();
+      if (!localMode && myColor === 'w') broadcastTwoPlayerSnapshot();
+    }
+
+    function resignCurrentGame() {
+      if (!game || phase !== 'select' || spectatorMode) return;
+      if (isFour()) {
+        const color = game.turn;
+        if (fourCanClaim() !== color && !confirm(`${FOUR_SIDE[color]} resign?`)) return;
+        fourResign();
+        return;
+      }
+      const color = isSimultaneous() ? myColor : game.turn;
+      if (!localMode && color !== myColor) return;
+      if (!localMode && !conn) return;
+      if (!confirm(`${SIDE[color]} resign?`)) return;
+      if (!localMode) send({ type: 'resign', color });
+      finishTwoPlayerResignation(color);
+    }
+
     function updateStatus() {
       if (!game) return;
       if (isRowCall()) {
@@ -5591,6 +5650,7 @@
         reviewNextEl.disabled = reviewLastEl.disabled = reviewIndex === total;
       }
       updateClockDisplay();
+      updateTwoPlayerResignControl(entry);
     }
 
     function send(msg) {
@@ -6058,6 +6118,8 @@
           if (myColor === 'b' || spectatorMode) applyNetworkClock(msg);
         } else if (msg.type === 'timeout') {
           if (myColor === 'b' || spectatorMode) finishNetworkTimeout(msg.color);
+        } else if (msg.type === 'resign' && game && !spectatorMode && msg.color === opponent(myColor)) {
+          finishTwoPlayerResignation(msg.color, true);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
@@ -6604,12 +6666,7 @@
       if (!btn) return;
       applyTimePreset(Number(btn.dataset.minutes), Number(btn.dataset.increment));
     });
-    resignBtnEl.addEventListener('click', () => {
-      if (!isFour() || phase !== 'select') return;
-      const color = game.turn;
-      if (fourCanClaim() !== color && !confirm(`${FOUR_SIDE[color]} resign?`)) return;
-      fourResign();
-    });
+    resignBtnEl.addEventListener('click', resignCurrentGame);
     claimBtnEl.addEventListener('click', () => {
       if (!isFour() || phase !== 'select') return;
       const color = fourCanClaim();
