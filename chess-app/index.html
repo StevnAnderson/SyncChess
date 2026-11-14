@@ -3340,7 +3340,7 @@
             (Array.isArray(m.enPassant) && m.enPassant[0] === r && m.enPassant[1] === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           if (checked.some(([kr, kc]) => kr === r && kc === c)) sq.classList.add('in-check');
-          const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
+          const target = selected && selected.moves && selected.moves.find(m => m.tr === r && m.tc === c);
           if (target) {
             sq.classList.add('target');
             if (board[r][c]) sq.classList.add('capture');
@@ -4346,6 +4346,7 @@
     }
 
     function onSquareClick(r, c) {
+      const piece = game && game.board[r][c];
       if (isTeeko()) {
         onTeekoSquareClick(r, c);
         return;
@@ -4399,7 +4400,6 @@
         return;
       }
       const actor = activeColor();
-      const piece = game.board[r][c];
       if (isDuck() && selectedDuckMove) {
         const allowed = duckPlacementSquares(selectedDuckMove.move, actor);
         if (allowed.some(([dr, dc]) => dr === r && dc === c)) {
@@ -5100,7 +5100,12 @@
       boardEl.innerHTML = '';
       const dark = isDark();
       const entry = reviewing && game.history ? game.history[reviewIndex] : null;
-      const board = entry ? entry.board : game.board;
+      let board = entry ? entry.board : game.board;
+      if (!entry && isAmazons() && selected && selected.amazonMove) {
+        board = cloneBoard(game.board);
+        board[selected.amazonMove.tr][selected.amazonMove.tc] = board[selected.amazonMove.fr][selected.amazonMove.fc];
+        board[selected.amazonMove.fr][selected.amazonMove.fc] = null;
+      }
       const captured = entry ? entry.captured : game.captured;
       const lastMoves = entry ? entry.lastMoves : game.lastMoves;
       const hideDarkSyncAnimation = dark && localMode && isSimultaneous() && phase === 'resolving';
@@ -5133,7 +5138,7 @@
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           if (dropTargets.has(r * 8 + c) || duckTargets.has(r * 8 + c) || amazonTargets.has(r * 8 + c)) sq.classList.add('target');
           if (checked.some(k => k[0] === r && k[1] === c)) sq.classList.add('in-check');
-          const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
+          const target = selected && selected.moves && selected.moves.find(m => m.tr === r && m.tc === c);
           if (target) {
             sq.classList.add('target');
             if (board[r][c] || target.enPassant) sq.classList.add('capture');
@@ -5142,7 +5147,7 @@
           if (piece && !fogged) {
             const span = document.createElement('span');
             span.className = piece.t === 'd' ? 'piece duck' : piece.t === 'x' ? 'piece destroyed-square' : 'piece ' + piece.c;
-            span.textContent = piece.t === 'd' ? GLYPHS.w.d : piece.t === 'x' ? (isAmazons() ? '🏹🔥' : '✖') : (isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t]);
+            span.textContent = piece.t === 'd' ? GLYPHS.w.d : piece.t === 'x' ? '✖' : (isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t]);
             sq.appendChild(span);
             if (piece.delayed && hideMoves) {
               const badge = document.createElement('span');
