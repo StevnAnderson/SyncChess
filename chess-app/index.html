@@ -415,6 +415,7 @@
       font-size: 0.78em;
       filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
     }
+    .piece.destroyed-square { font-size: clamp(1.4rem, 7vw, 3.6rem); filter: drop-shadow(0 0 2px #5b1b00); }
 
     .piece.r {
       color: #ff6b6b;
@@ -1097,6 +1098,25 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-amazons" hidden>
+      <h2>How Amazons Works</h2>
+      <ul>
+        <li>White starts with queens on a2, e1, and h3; Black starts on a6, d8, and h7.</li>
+        <li>On each turn, move one queen any distance along an empty straight or diagonal path, then fire an arrow along an empty straight or diagonal path. The arrow burns that square permanently.</li>
+        <li>Queens and arrows cannot cross occupied or burned squares. Queens do not capture.</li>
+        <li>If you cannot move any queen, you lose.</li>
+      </ul>
+    </div>
+
+    <div class="rules-panel" id="rules-pferde" hidden>
+      <h2>How Pferdeäppel Works</h2>
+      <ul>
+        <li>Each player starts with one knight in opposite corners.</li>
+        <li>Knights move like chess knights without capturing. The square a knight leaves is permanently destroyed and cannot be entered.</li>
+        <li>The last knight able to move wins.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-four" hidden>
       <h2>How 4P Chess Works</h2>
       <ul>
@@ -1195,6 +1215,8 @@
       { id: 'dark', name: 'Dark Chess' },
       { id: 'kinghill', name: 'King of the Hill' },
       { id: 'memory', name: 'Memory Chess' },
+      { id: 'amazons', name: 'Amazons' },
+      { id: 'pferde', name: 'Pferdeäppel' },
       { id: 'sync', name: 'Sync Chess' },
       { id: 'teeko', name: 'Teeko' },
       { id: 'threecheck', name: 'Three-Check' }
@@ -1225,6 +1247,7 @@
       sync: document.getElementById('rules-sync'),
       teeko: document.getElementById('rules-teeko'),
       threecheck: document.getElementById('rules-threecheck')
+      , amazons: document.getElementById('rules-amazons'), pferde: document.getElementById('rules-pferde')
     };
     const handoffEl = document.getElementById('handoff');
     const handoffTitleEl = document.getElementById('handoff-title');
@@ -1331,6 +1354,8 @@
     const isAtomic = () => gameKind === 'atomic';
     const isKingHill = () => gameKind === 'kinghill';
     const isThreeCheck = () => gameKind === 'threecheck';
+    const isAmazons = () => gameKind === 'amazons';
+    const isPferde = () => gameKind === 'pferde';
     const isTeeko = () => gameKind === 'teeko';
     const botsAllowed = () => localMode && gameKind === 'chess';
     const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
@@ -1542,11 +1567,21 @@
       clearBotMove();
       animationToken++;
       const board = Array.from({ length: 8 }, () => Array(8).fill(null));
-      for (let c = 0; c < 8; c++) {
-        board[0][c] = makePiece(BACK_RANK[c], 'b');
-        board[1][c] = makePiece('p', 'b');
-        board[6][c] = makePiece('p', 'w');
-        board[7][c] = makePiece(BACK_RANK[c], 'w');
+      if (isAmazons()) {
+        for (const [square, color] of [['a2', 'w'], ['e1', 'w'], ['h3', 'w'], ['a6', 'b'], ['d8', 'b'], ['h7', 'b']]) {
+          const c = FILES.indexOf(square[0]), r = 8 - Number(square[1]);
+          board[r][c] = makePiece('q', color);
+        }
+      } else if (isPferde()) {
+        board[7][0] = makePiece('n', 'w');
+        board[0][7] = makePiece('n', 'b');
+      } else {
+        for (let c = 0; c < 8; c++) {
+          board[0][c] = makePiece(BACK_RANK[c], 'b');
+          board[1][c] = makePiece('p', 'b');
+          board[6][c] = makePiece('p', 'w');
+          board[7][c] = makePiece(BACK_RANK[c], 'w');
+        }
       }
       game = {
         board,
@@ -1612,6 +1647,30 @@
       render();
       startClockForTurn();
       scheduleBotMove();
+    }
+
+    function variantRayMoves(board, r, c, queen) {
+      const dirs = queen
+        ? [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+        : [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+      const moves = [];
+      for (const [dr, dc] of dirs) {
+        let tr = r + dr, tc = c + dc;
+        while (inBounds(tr, tc)) {
+          if (board[tr][tc]) break;
+          moves.push({ fr: r, fc: c, tr, tc });
+          if (!queen) break;
+          tr += dr; tc += dc;
+        }
+      }
+      return moves;
+    }
+
+    function amazonsShotSquares(board, move) {
+      const temp = cloneBoard(board);
+      temp[move.fr][move.fc] = null;
+      temp[move.tr][move.tc] = { t: 'q', c: game.turn, id: -1 };
+      return variantRayMoves(temp, move.tr, move.tc, true).map(m => [m.tr, m.tc]);
     }
 
     // ---------------------------------------------------------------------
@@ -3746,6 +3805,8 @@
     }
 
     function legalMoves(g, r, c) {
+      if (isAmazons()) return variantRayMoves(g.board, r, c, true);
+      if (isPferde()) return variantRayMoves(g.board, r, c, false);
       const color = g.board[r][c].c;
       const moves = pseudoMoves(g, r, c, !isDark());
       if (isDark()) return moves;
@@ -4293,6 +4354,39 @@
         onFourSquareClick(r, c);
         return;
       }
+      if (isAmazons() && selected && selected.amazonMove) {
+        if (spectatorMode || reviewing || phase !== 'select' || handoff || awaitingHostState) return;
+        const shot = selected.shots.find(([sr, sc]) => sr === r && sc === c);
+        if (shot) {
+          const chosen = { ...selected.amazonMove, amazon: true, ar: r, ac: c };
+          selected = null;
+          lockIn(chosen, null);
+        } else {
+          selected = null;
+          render();
+        }
+        return;
+      }
+      if (isAmazons() || isPferde()) {
+        if (spectatorMode || reviewing || phase !== 'select' || handoff || awaitingHostState ||
+          (!localMode && game.turn !== myColor)) return;
+        if (selected) {
+          const move = selected.moves.find(m => m.tr === r && m.tc === c);
+          if (move) {
+            if (isAmazons()) {
+              selected = { r: move.tr, c: move.tc, amazonMove: move, shots: amazonsShotSquares(game.board, move) };
+              setStatus(`${SIDE[game.turn]}: Fire an arrow.`);
+            } else {
+              lockIn({ ...move, pferde: true }, null);
+              return;
+            }
+          } else selected = null;
+        } else if (piece && piece.c === game.turn) {
+          selected = { r, c, moves: legalMoves(game, r, c) };
+        }
+        render();
+        return;
+      }
       if (spectatorMode) return;
       if (reviewing || phase !== 'select' || choosingPromotion || handoff) return;
       if (awaitingHostState) return;
@@ -4648,6 +4742,43 @@
 
     // Applies one standard-chess move immediately: no simultaneous resolution, no delay.
     function applyStandardMove(move, incoming = false) {
+      if (move && (move.amazon || move.pferde)) {
+        const color = game.turn;
+        const moving = game.board[move.fr] && game.board[move.fr][move.fc];
+        if (!moving || moving.c !== color || !legalMoves(game, move.fr, move.fc).some(m => m.tr === move.tr && m.tc === move.tc)) return;
+        syncClock();
+        const before = cloneBoard(game.board);
+        game.board[move.tr][move.tc] = moving;
+        game.board[move.fr][move.fc] = null;
+        let lines;
+        if (move.amazon) {
+          const validShot = amazonsShotSquares(before, move).some(([r, c]) => r === move.ar && c === move.ac);
+          if (!validShot) { game.board = before; return; }
+          game.board[move.ar][move.ac] = { t: 'x', c: 'w', id: nextId++ };
+          lines = [`${SIDE[color]} moved a queen to ${squareName([move.tr, move.tc])} and burned ${squareName([move.ar, move.ac])}.`];
+        } else {
+          game.board[move.fr][move.fc] = { t: 'x', c: 'w', id: nextId++ };
+          lines = [`${SIDE[color]} moved a knight to ${squareName([move.tr, move.tc])}; ${squareName([move.fr, move.fc])} is destroyed.`];
+        }
+        game.lastMoves = [{ ...move }];
+        game.turn = opponent(color);
+        addIncrement(color);
+        playMoveSound(false);
+        if (isPferde() && !game.board.some((row, r) => row.some((p, c) => p && p.c === game.turn && p.t === 'n' && legalMoves(game, r, c).length))) {
+          game.result = `Pferdeäppel - ${SIDE[color]} Wins`;
+          lines.push(`${SIDE[game.turn]} has no legal knight move.`);
+        } else if (isAmazons() && !game.board.some((row, r) => row.some((p, c) => p && p.c === game.turn && legalMoves(game, r, c).length))) {
+          game.result = `Amazons - ${SIDE[color]} Wins`;
+          lines.push(`${SIDE[game.turn]} has no legal queen move.`);
+        }
+        phase = game.result ? 'over' : 'select';
+        selected = null;
+        const label = `${SIDE[color]} ${isAmazons() ? 'queen and arrow' : 'knight'}: ${squareName([move.fr, move.fc])}–${squareName([move.tr, move.tc])}`;
+        pushHistory(lines, label);
+        setLog(lines);
+        updateStatus(); render(); startClockForTurn();
+        return;
+      }
       if (move.teeko) {
         applyTeekoAction(move);
         return;
@@ -4985,6 +5116,8 @@
       const duckTargets = isDuck() && selectedDuckMove && !entry && phase === 'select'
         ? new Set(duckPlacementSquares(selectedDuckMove.move, activeColor()).map(([r, c]) => r * 8 + c))
         : new Set();
+      const amazonTargets = isAmazons() && selected && selected.amazonMove
+        ? new Set(selected.shots.map(([r, c]) => r * 8 + c)) : new Set();
       const checked = dark ? [] : ['w', 'b'].filter(c => inCheck(board, c)).map(c => findKing(board, c));
       const hideMoves = phase === 'select';
       const flip = myColor === 'b' && !localMode;
@@ -4998,7 +5131,7 @@
           if (fogged) sq.classList.add('fog');
           if ((!dark || entry) && lastMoves.some(m => (m.fr === r && m.fc === c) || (m.tr === r && m.tc === c))) sq.classList.add('last-move');
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
-          if (dropTargets.has(r * 8 + c) || duckTargets.has(r * 8 + c)) sq.classList.add('target');
+          if (dropTargets.has(r * 8 + c) || duckTargets.has(r * 8 + c) || amazonTargets.has(r * 8 + c)) sq.classList.add('target');
           if (checked.some(k => k[0] === r && k[1] === c)) sq.classList.add('in-check');
           const target = selected && selected.moves.find(m => m.tr === r && m.tc === c);
           if (target) {
@@ -5008,8 +5141,8 @@
           const piece = board[r][c];
           if (piece && !fogged) {
             const span = document.createElement('span');
-            span.className = piece.t === 'd' ? 'piece duck' : 'piece ' + piece.c;
-            span.textContent = piece.t === 'd' ? GLYPHS.w.d : (isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t]);
+            span.className = piece.t === 'd' ? 'piece duck' : piece.t === 'x' ? 'piece destroyed-square' : 'piece ' + piece.c;
+            span.textContent = piece.t === 'd' ? GLYPHS.w.d : piece.t === 'x' ? (isAmazons() ? '🏹🔥' : '✖') : (isMemory() && !entry ? '\u25CF' : GLYPHS[piece.c][piece.t]);
             sq.appendChild(span);
             if (piece.delayed && hideMoves) {
               const badge = document.createElement('span');
@@ -5839,12 +5972,12 @@
         timeFieldsEl.appendChild(row);
       }
       timeTitleEl.textContent = 'Time Control';
-      syncModeOptionEl.hidden = gameKind === 'sync' || gameKind === 'teeko';
-      memoryModeOptionEl.hidden = gameKind === 'memory' || gameKind === 'teeko';
+      syncModeOptionEl.hidden = gameKind === 'sync' || gameKind === 'teeko' || isAmazons() || isPferde();
+      memoryModeOptionEl.hidden = gameKind === 'memory' || gameKind === 'teeko' || isAmazons() || isPferde();
       spectatorsOptionEl.hidden = action !== 'host';
       allowSpectatorsInputEl.checked = false;
-      syncModeInputEl.checked = !isTeeko() && simultaneousMode;
-      memoryModeInputEl.checked = !isTeeko() && memoryMode;
+      syncModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && simultaneousMode;
+      memoryModeInputEl.checked = !isTeeko() && !isAmazons() && !isPferde() && memoryMode;
       if (showBots) {
         // Bots play normal chess only, so keep Sync mode and bots exclusive.
         const botBoxes = [...timeFieldsEl.querySelectorAll('.time-bot-input')];
@@ -6055,9 +6188,9 @@
           })
           .map(row => row.dataset.color))
         : new Set();
-      simultaneousMode = gameKind === 'sync' || (!isTeeko() && syncModeInputEl.checked);
+      simultaneousMode = gameKind === 'sync' || (!isTeeko() && !isAmazons() && !isPferde() && syncModeInputEl.checked);
       if (chosenBots.size) simultaneousMode = false;
-      memoryMode = gameKind !== 'memory' && !isTeeko() && memoryModeInputEl.checked;
+      memoryMode = gameKind !== 'memory' && !isTeeko() && !isAmazons() && !isPferde() && memoryModeInputEl.checked;
       botSeats = chosenBots;
       timeModalEl.hidden = true;
       pendingAction = null;
