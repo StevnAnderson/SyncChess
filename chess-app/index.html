@@ -3064,6 +3064,7 @@
           const square = next.get(mover);
           const target = board[square[0]][square[1]];
           if (target && fourEnemy(mover.color, target.c)) {
+            const reachesDestination = isFinal(mover);
             const victimMover = moverAt(square);
             if (victimMover && victimMover.action !== mover.action) removeAction(victimMover.action);
             else board[square[0]][square[1]] = null;
@@ -3072,17 +3073,18 @@
               delay: game.states[target.c] === 'active' });
             events.push(`${FOUR_SIDE[mover.color]} captured ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} on ${fourSquareName(square)}.`);
             place(mover, square);
-            if (!isFinal(mover)) mover.done = true;
+            if (!reachesDestination) mover.done = true;
           } else if (target) {
             const teammateMover = moverAt(square);
             if (teammateMover && teammateMover.action !== mover.action) {
+              const reachesDestination = isFinal(mover);
               removeAction(teammateMover.action);
               captures.push({ by: mover.color, piece: target, capturer: mover.piece,
                 zombie: mover.action.zombie, score: false,
                 delay: game.states[target.c] === 'active' });
               events.push(`${FOUR_SIDE[mover.color]} intercepted ${FOUR_SIDE[target.c]}'s ${NAMES[target.t]} on ${fourSquareName(square)}.`);
               place(mover, square);
-              if (!isFinal(mover)) mover.done = true;
+              if (!reachesDestination) mover.done = true;
             } else {
               removeAction(mover.action);
               events.push(`${FOUR_SIDE[mover.color]}'s ${NAMES[mover.piece.t]} was blocked on ${fourSquareName(square)}.`);
