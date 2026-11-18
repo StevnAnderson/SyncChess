@@ -298,7 +298,7 @@
       display: none;
     }
 
-    .board-panel.no-repeats-active .board { display: none; }
+    .board-panel.no-repeats-active .board, .board-panel.hearts-active .board { display: none; }
 
     .board {
       display: grid;
@@ -508,6 +508,19 @@
     .nr-controls, .nr-choice-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.8rem; }
     .nr-controls[hidden], .nr-choice-buttons[hidden] { display: none; }
     .nr-status { text-align: center; color: var(--text-muted); margin: 0.6rem 0; }
+    .hearts-panel { width: min(100%, 820px); }
+    .hearts-panel[hidden], .hearts-panel [hidden] { display: none; }
+    .hearts-lobby, .hearts-game { background: var(--bg-color); border-radius: 10px; padding: 1rem; }
+    .hearts-lobby-players, .hearts-players { display: grid; gap: 0.55rem; margin: 0.8rem 0; }
+    .hearts-player { padding: 0.7rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    .hearts-player.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .hearts-player-line { display: flex; justify-content: space-between; gap: 0.5rem; font-weight: 700; }
+    .hearts-table { min-height: 4.5rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.55rem; margin: 0.8rem 0; padding: 0.8rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    .hearts-card { min-width: 2.6rem; padding: 0.4rem 0.55rem; background: #f2e7c9; border: 1px solid #d7c8a7; border-radius: 6px; color: #171725; font-weight: 800; }
+    .hearts-card.red { color: #bc2339; }
+    .hearts-hand, .hearts-pass-selection { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.35rem; margin: 0.8rem 0; }
+    .hearts-hand button.selected { outline: 3px solid var(--accent); transform: translateY(-4px); }
+    .hearts-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
 
     .board.four .piece.b {
       color: #5aa9ff;
@@ -1014,6 +1027,23 @@
       </div>
     </div>
     <div class="board-panel" id="board-panel" hidden>
+      <div class="hearts-panel" id="hearts-panel" hidden>
+        <section class="hearts-lobby" id="hearts-lobby" hidden>
+          <h2>Hearts Lobby</h2>
+          <div class="nr-status" id="hearts-lobby-count">1 / 4 players joined</div>
+          <div class="hearts-lobby-players" id="hearts-lobby-players"></div>
+          <label id="hearts-spectators-label"><input id="hearts-allow-spectators" type="checkbox"> Allow spectators</label>
+          <div class="hearts-actions"><button class="btn" id="hearts-play-btn" type="button" disabled>Play</button></div>
+        </section>
+        <section class="hearts-game" id="hearts-game" hidden>
+          <div class="nr-player-title"><span id="hearts-round-label">Hand 1</span><span id="hearts-pass-label"></span></div>
+          <div class="nr-status" id="hearts-game-status"></div>
+          <div class="hearts-players" id="hearts-players"></div>
+          <div class="hearts-table" id="hearts-table"></div>
+          <div class="hearts-hand" id="hearts-hand"></div>
+          <div class="hearts-actions" id="hearts-actions"></div>
+        </section>
+      </div>
       <div class="no-repeats-panel" id="no-repeats-panel" hidden>
         <section class="nr-lobby nr-section" id="nr-lobby" hidden>
           <h2>No Repeats Lobby</h2>
@@ -1230,6 +1260,17 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-hearts" hidden>
+      <h2>How Hearts Works</h2>
+      <ul>
+        <li>Four players receive 13 cards each. Pass three cards left, right, across, then keep your cards on the fourth hand.</li>
+        <li>The holder of the 2 of clubs leads the first trick. Follow suit if possible; the highest card in the led suit takes the trick. There is no trump suit.</li>
+        <li>Hearts cannot be led until broken, unless you have only hearts. On the first trick, avoid playing hearts or the queen of spades when you have another legal card.</li>
+        <li>Each heart is worth 1 point and the queen of spades is worth 13. Taking all 26 penalty points in a hand shoots the moon: the other players each receive 26 points.</li>
+        <li>Low score wins when a player reaches 100 points at the end of a hand.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-four" hidden>
       <h2>How 4P Chess Works</h2>
       <ul>
@@ -1334,7 +1375,7 @@
       ] },
       { name: 'Other Games', games: [
         { id: 'amazons', name: 'Amazons' }, { id: 'cats', name: 'Cats and Dogs' },
-        { id: 'norepeats', name: 'No Repeats' }, { id: 'pferde', name: 'Pferdeappel' }, { id: 'rowcall', name: 'Row Call' },
+        { id: 'hearts', name: 'Hearts' }, { id: 'norepeats', name: 'No Repeats' }, { id: 'pferde', name: 'Pferdeappel' }, { id: 'rowcall', name: 'Row Call' },
         { id: 'teeko', name: 'Teeko' }
       ] }
     ];
@@ -1367,13 +1408,27 @@
       threecheck: document.getElementById('rules-threecheck'),
       amazons: document.getElementById('rules-amazons'), pferde: document.getElementById('rules-pferde'),
       cats: document.getElementById('rules-cats'), rowcall: document.getElementById('rules-rowcall'),
-      norepeats: document.getElementById('rules-norepeats')
+      norepeats: document.getElementById('rules-norepeats'), hearts: document.getElementById('rules-hearts')
     };
     const handoffEl = document.getElementById('handoff');
     const handoffTitleEl = document.getElementById('handoff-title');
     const handoffBtnEl = document.getElementById('handoff-btn');
     const panelEl = document.getElementById('board-panel');
     const noRepeatsPanelEl = document.getElementById('no-repeats-panel');
+    const heartsPanelEl = document.getElementById('hearts-panel');
+    const heartsLobbyEl = document.getElementById('hearts-lobby');
+    const heartsGameEl = document.getElementById('hearts-game');
+    const heartsLobbyCountEl = document.getElementById('hearts-lobby-count');
+    const heartsLobbyPlayersEl = document.getElementById('hearts-lobby-players');
+    const heartsPlayersEl = document.getElementById('hearts-players');
+    const heartsTableEl = document.getElementById('hearts-table');
+    const heartsHandEl = document.getElementById('hearts-hand');
+    const heartsActionsEl = document.getElementById('hearts-actions');
+    const heartsStatusEl = document.getElementById('hearts-game-status');
+    const heartsRoundLabelEl = document.getElementById('hearts-round-label');
+    const heartsPassLabelEl = document.getElementById('hearts-pass-label');
+    const heartsAllowSpectatorsEl = document.getElementById('hearts-allow-spectators');
+    const heartsPlayBtnEl = document.getElementById('hearts-play-btn');
     const noRepeatsLobbyEl = document.getElementById('nr-lobby');
     const noRepeatsGameEl = document.getElementById('nr-game');
     const noRepeatsLobbyCountEl = document.getElementById('nr-lobby-count');
@@ -1456,6 +1511,8 @@
     let conn = null;
     let fourNetwork = null;
     let noRepeatsNetwork = null;
+    let heartsNetwork = null;
+    let heartsSelectedPass = new Set();
     let spectatorMode = false;
     let hostedSpectators = new Set();
     let hostAllowsSpectators = false;
@@ -1499,6 +1556,7 @@
     const isCats = () => gameKind === 'cats';
     const isRowCall = () => gameKind === 'rowcall';
     const isNoRepeats = () => gameKind === 'norepeats';
+    const isHearts = () => gameKind === 'hearts';
     const isTeeko = () => gameKind === 'teeko';
     const botsAllowed = () => localMode && gameKind === 'chess';
     const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
@@ -1699,6 +1757,10 @@
     }
 
     function newGame(controls = null) {
+      if (isHearts()) {
+        newHeartsLocalGame();
+        return;
+      }
       if (isNoRepeats()) {
         newNoRepeatsLocalGame(2);
         return;
@@ -2877,6 +2939,8 @@
     }
 
     function renderNoRepeats() {
+      panelEl.classList.remove('hearts-active');
+      heartsPanelEl.hidden = true;
       panelEl.classList.add('no-repeats-active');
       rowCallLayoutEl.classList.remove('active', 'choosing-line');
       noRepeatsPanelEl.hidden = false;
@@ -2994,6 +3058,541 @@
       } else {
         const player = game.players.find(candidate => candidate.id === game.currentPlayerId);
         setStatus(player && nrCanControl(player.id) ? 'Your turn · Hit or Stay' : `${player ? player.name : 'A player'} to Hit or Stay`);
+      }
+    }
+
+    function heartsCardLabel(card) {
+      const rank = card.rank <= 10 ? String(card.rank) : ({ 11: 'J', 12: 'Q', 13: 'K', 14: 'A' })[card.rank];
+      const suit = { C: '♣', D: '♦', H: '♥', S: '♠' }[card.suit];
+      return `${rank}${suit}`;
+    }
+
+    function heartsMakeDeck() {
+      const cards = [];
+      for (const suit of ['C', 'D', 'S', 'H']) {
+        for (let rank = 2; rank <= 14; rank++) cards.push({ id: `${suit}${rank}`, suit, rank });
+      }
+      return nrShuffle(cards);
+    }
+
+    function heartsPassDirection(handNo) {
+      return ['left', 'right', 'across', 'hold'][(handNo - 1) % 4];
+    }
+
+    function heartsSortHand(hand) {
+      const suitOrder = { C: 0, D: 1, S: 2, H: 3 };
+      hand.sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.rank - b.rank);
+    }
+
+    function heartsNewGame(players) {
+      const roster = players.map((player, index) => ({
+        id: player.id || `p${index}`, name: player.name || `Player ${index + 1}`,
+        score: 0, hand: [], handCount: 0, passSelections: [], tricks: [], handScore: 0, forfeited: false
+      }));
+      return {
+        players: roster, deck: [], discard: [], handNo: 0, passDirection: 'left',
+        passSelections: {}, phase: 'between', trickNo: 0, trick: [], currentPlayerId: null,
+        heartsBroken: false, handScores: {}, logLines: [], result: null
+      };
+    }
+
+    function heartsStartHand() {
+      if (!game || game.players.length !== 4) return;
+      phase = 'select';
+      game.handNo++;
+      game.passDirection = heartsPassDirection(game.handNo);
+      game.deck = heartsMakeDeck();
+      game.discard = [];
+      game.passSelections = {};
+      game.trickNo = 0;
+      game.trick = [];
+      game.currentPlayerId = null;
+      game.heartsBroken = false;
+      game.handScores = {};
+      for (const player of game.players) {
+        player.hand = [];
+        player.handCount = 13;
+        player.passSelections = [];
+        player.tricks = [];
+        player.handScore = 0;
+      }
+      for (let cardIndex = 0; cardIndex < 52; cardIndex++) {
+        game.players[cardIndex % 4].hand.push(game.deck.pop());
+      }
+      for (const player of game.players) heartsSortHand(player.hand);
+      game.phase = game.passDirection === 'hold' ? 'turn' : 'passing';
+      game.logLines.push(`Hand ${game.handNo} begins${game.passDirection === 'hold' ? ' with no passing' : `; pass three cards ${game.passDirection}`}.`);
+      if (game.phase === 'turn') heartsFindOpeningLeader();
+    }
+
+    function heartsPassTarget(playerId) {
+      const playerIndex = game.players.findIndex(player => player.id === playerId);
+      const offset = game.passDirection === 'left' ? 1 : game.passDirection === 'right' ? 3 : game.passDirection === 'across' ? 2 : 0;
+      return game.players[(playerIndex + offset) % 4];
+    }
+
+    function heartsResolvePasses() {
+      const outgoing = game.players.map(player => ({
+        player,
+        cards: game.passSelections[player.id].map(cardId => player.hand.find(card => card.id === cardId))
+      }));
+      for (const { player, cards } of outgoing) {
+        const ids = new Set(cards.map(card => card.id));
+        player.hand = player.hand.filter(card => !ids.has(card.id));
+      }
+      for (const { player, cards } of outgoing) heartsPassTarget(player.id).hand.push(...cards);
+      for (const player of game.players) {
+        heartsSortHand(player.hand);
+        player.handCount = player.hand.length;
+      }
+      game.passSelections = {};
+      game.logLines.push('The cards have been passed.');
+      heartsFindOpeningLeader();
+    }
+
+    function heartsFindOpeningLeader() {
+      const opener = game.players.find(player => player.hand.some(card => card.suit === 'C' && card.rank === 2));
+      if (!opener) { heartsEndHand(); return; }
+      game.currentPlayerId = opener.id;
+      game.phase = 'turn';
+    }
+
+    function heartsCardPoints(card) {
+      return (card.suit === 'H' ? 1 : 0) + (card.suit === 'S' && card.rank === 12 ? 13 : 0);
+    }
+
+    function heartsLegalCards(playerId) {
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!player || game.phase !== 'turn' || playerId !== game.currentPlayerId) return [];
+      let legal = player.hand;
+      if (game.trick.length) {
+        const ledSuit = game.trick[0].card.suit;
+        const following = player.hand.filter(card => card.suit === ledSuit);
+        if (following.length) legal = following;
+      } else if (game.trickNo === 0) {
+        return player.hand.filter(card => card.suit === 'C' && card.rank === 2);
+      } else if (!game.heartsBroken) {
+        const nonHearts = player.hand.filter(card => card.suit !== 'H');
+        if (nonHearts.length) legal = nonHearts;
+      }
+      if (game.trickNo === 0) {
+        const nonPoints = legal.filter(card => heartsCardPoints(card) === 0);
+        if (nonPoints.length) legal = nonPoints;
+      }
+      return legal;
+    }
+
+    function heartsResolveTrick() {
+      const ledSuit = game.trick[0].card.suit;
+      let winner = game.trick[0];
+      for (const play of game.trick) {
+        if (play.card.suit === ledSuit && play.card.rank > winner.card.rank) winner = play;
+      }
+      const cards = game.trick.map(play => play.card);
+      const points = cards.reduce((sum, card) => sum + heartsCardPoints(card), 0);
+      const player = game.players.find(candidate => candidate.id === winner.playerId);
+      player.tricks.push(...cards);
+      player.handScore += points;
+      game.discard.push(...cards);
+      game.logLines.push(`${player.name} took trick ${game.trickNo + 1}${points ? ` for ${points} point${points === 1 ? '' : 's'}` : ''}.`);
+      game.trickNo++;
+      game.trick = [];
+      if (game.trickNo >= 13) {
+        heartsEndHand();
+      } else {
+        game.currentPlayerId = winner.playerId;
+      }
+    }
+
+    function heartsEndHand() {
+      const moonShooter = game.players.find(player => player.handScore === 26);
+      for (const player of game.players) {
+        game.handScores[player.id] = moonShooter
+          ? (player.id === moonShooter.id ? 0 : 26)
+          : player.handScore;
+        player.score += game.handScores[player.id];
+      }
+      if (moonShooter) game.logLines.push(`${moonShooter.name} shot the moon; each other player receives 26 points.`);
+      else game.logLines.push('The hand is complete.');
+      for (const player of game.players) player.handCount = 0;
+      game.currentPlayerId = null;
+      game.phase = 'between';
+      const overLimit = game.players.some(player => player.score >= 100);
+      if (overLimit) {
+        const low = Math.min(...game.players.map(player => player.score));
+        const leaders = game.players.filter(player => player.score === low);
+        if (leaders.length === 1) {
+          game.phase = 'over';
+          game.result = `Hearts - ${leaders[0].name} Wins`;
+          game.logLines.push(game.result);
+        } else {
+          game.logLines.push('Scores are tied for lowest; another hand will decide the winner.');
+        }
+      }
+      phase = game.phase === 'over' ? 'over' : 'select';
+    }
+
+    function heartsApplyAction(playerId, action) {
+      if (!game || game.phase === 'over') return;
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!player || player.forfeited || !action) return;
+      if (action.type === 'resign') {
+        player.forfeited = true;
+        game.logLines.push(`${player.name} resigned.`);
+        const remaining = game.players.filter(candidate => !candidate.forfeited);
+        const low = Math.min(...remaining.map(candidate => candidate.score));
+        const winners = remaining.filter(candidate => candidate.score === low);
+        game.result = winners.length === 1 ? `Hearts - ${winners[0].name} Wins by resignation` : 'Hearts - Resignation';
+        game.phase = 'over';
+        phase = 'over';
+        return;
+      }
+      if (action.type === 'pass' && game.phase === 'passing' && !game.passSelections[playerId]) {
+        const ids = action.cardIds;
+        if (!Array.isArray(ids) || ids.length !== 3 || new Set(ids).size !== 3 || ids.some(id => !player.hand.some(card => card.id === id))) return;
+        game.passSelections[playerId] = [...ids];
+        game.logLines.push(`${player.name} selected cards to pass.`);
+        if (Object.keys(game.passSelections).length === 4) heartsResolvePasses();
+        return;
+      }
+      if (action.type === 'play' && game.phase === 'turn' && game.currentPlayerId === playerId) {
+        const card = heartsLegalCards(playerId).find(candidate => candidate.id === action.cardId);
+        if (!card) return;
+        player.hand.splice(player.hand.findIndex(candidate => candidate.id === card.id), 1);
+        player.handCount = player.hand.length;
+        game.trick.push({ playerId, card });
+        game.logLines.push(`${player.name} played ${heartsCardLabel(card)}.`);
+        if (card.suit === 'H') game.heartsBroken = true;
+        if (game.trick.length === 4) heartsResolveTrick();
+        else game.currentPlayerId = game.players[(game.players.findIndex(candidate => candidate.id === playerId) + 1) % 4].id;
+        return;
+      }
+      if (action.type === 'next' && game.phase === 'between') heartsStartHand();
+    }
+
+    function heartsControlPlayerId() {
+      if (localMode && game) {
+        if (game.phase === 'passing') return game.players.find(player => !game.passSelections[player.id])?.id || null;
+        if (game.phase === 'between') return game.players.find(player => !player.forfeited)?.id || null;
+        return game.currentPlayerId;
+      }
+      if (heartsNetwork && heartsNetwork.role === 'host') return heartsNetwork.playerId || 'p0';
+      return heartsNetwork && heartsNetwork.playerId;
+    }
+
+    function heartsPublicState(viewerId, spectator = false) {
+      const state = networkCopy(game);
+      state.deckCount = game.deck.length;
+      state.deck = [];
+      state.passCount = Object.keys(game.passSelections).length;
+      state.passSubmitted = !!(viewerId && game.passSelections[viewerId]);
+      state.passSelections = {};
+      for (const player of state.players) {
+        player.handCount = (game.players.find(candidate => candidate.id === player.id).hand || []).length;
+        if (spectator || player.id !== viewerId) player.hand = [];
+      }
+      return state;
+    }
+
+    function heartsLobbyState(playerId = null, spectator = false) {
+      return { type: 'hearts-lobby', playerId, spectator,
+        roster: heartsNetwork.roster.map(player => ({ id: player.id, name: player.name })) };
+    }
+
+    function heartsBroadcastLobby() {
+      if (!heartsNetwork || heartsNetwork.role !== 'host') return;
+      for (const [playerId, connection] of heartsNetwork.connections) {
+        if (connection && connection.open) connection.send(heartsLobbyState(playerId));
+      }
+      heartsRender(); heartsUpdateStatus();
+    }
+
+    function heartsOfferSpectator(connection) {
+      const network = heartsNetwork;
+      const offer = () => {
+        if (!connection.open) return;
+        connection.send(network.allowSpectators ? { type: 'hearts-spectator-offer' } : { type: 'full' });
+        if (!network.allowSpectators) setTimeout(() => connection.close(), 500);
+      };
+      connection.on('open', offer);
+      if (connection.open) offer();
+      if (!network.allowSpectators) return;
+      connection.on('data', message => {
+        if (heartsNetwork !== network || message.type !== 'hearts-spectator-accept') return;
+        network.spectators.add(connection);
+        if (game && network.started) connection.send({ type: 'hearts-state', spectator: true, state: heartsPublicState(null, true) });
+        else connection.send(heartsLobbyState(null, true));
+      });
+      connection.on('close', () => network.spectators.delete(connection));
+    }
+
+    function heartsBroadcastState() {
+      if (!game || !heartsNetwork || heartsNetwork.role !== 'host') return;
+      for (const [playerId, connection] of heartsNetwork.connections) {
+        if (connection && connection.open) connection.send({ type: 'hearts-state', playerId, state: heartsPublicState(playerId) });
+      }
+      for (const connection of heartsNetwork.spectators) {
+        if (connection && connection.open) connection.send({ type: 'hearts-state', spectator: true, state: heartsPublicState(null, true) });
+      }
+    }
+
+    function heartsHandleClientMessage(network, connection, message) {
+      if (!network || !message) return;
+      network.connection = connection;
+      setGameKind('hearts');
+      if (message.type === 'hearts-lobby') {
+        network.roster = message.roster || [];
+        network.role = message.spectator ? 'spectator' : 'client';
+        if (message.playerId) network.playerId = message.playerId;
+        spectatorMode = network.role === 'spectator';
+        panelEl.hidden = false;
+        heartsRender(); heartsUpdateStatus();
+      } else if (message.type === 'hearts-start' || message.type === 'hearts-state') {
+        network.role = message.spectator ? 'spectator' : 'client';
+        if (message.playerId) network.playerId = message.playerId;
+        spectatorMode = network.role === 'spectator';
+        network.awaitingAction = false;
+        heartsSelectedPass.clear();
+        heartsSetPublicGame(message.state, network.playerId, spectatorMode);
+      }
+    }
+
+    function heartsSetPublicGame(state, viewerId, isSpectator) {
+      game = restoreNetworkCopy(state);
+      game.deck = [];
+      game.passSelections = {};
+      game.passSubmitted = !!state.passSubmitted;
+      phase = game.phase === 'over' ? 'over' : 'select';
+      panelEl.hidden = false;
+      heartsRender(viewerId, isSpectator);
+      heartsUpdateStatus();
+    }
+
+    function heartsHandleHostMessage(network, playerId, connection, message) {
+      if (heartsNetwork !== network || !network.started || network.connections.get(playerId) !== connection || !message) return;
+      if (message.type === 'hearts-action' && (message.action?.type !== 'next' || playerId === 'p0')) {
+        heartsApplyAction(playerId, message.action || {});
+        heartsRender(); heartsUpdateStatus(); heartsBroadcastState();
+      }
+    }
+
+    function newHeartsLocalGame() {
+      leaveGame();
+      localMode = true;
+      spectatorMode = false;
+      heartsNetwork = { role: 'local', playerId: 'p0', roster: [] };
+      game = heartsNewGame(Array.from({ length: 4 }, (_, index) => ({ id: `p${index}`, name: `Player ${index + 1}` })));
+      phase = 'select';
+      heartsStartHand();
+      render(); updateStatus();
+    }
+
+    function hostHeartsGame(attempt = 0) {
+      leaveGame();
+      localMode = false;
+      spectatorMode = false;
+      heartsAllowSpectatorsEl.checked = false;
+      const network = heartsNetwork = {
+        role: 'host', playerId: 'p0', code: randomCode(), allowSpectators: false,
+        started: false, roster: [{ id: 'p0', name: 'Host' }], connections: new Map(), spectators: new Set()
+      };
+      const peerConnection = new Peer(PEER_PREFIX + network.code);
+      peer = peerConnection;
+      peerConnection.on('open', () => {
+        if (heartsNetwork !== network) return;
+        panelEl.hidden = false; heartsRender(); heartsUpdateStatus();
+      });
+      peerConnection.on('connection', connection => {
+        if (heartsNetwork !== network) return;
+        if (network.started || network.roster.length >= 4) { heartsOfferSpectator(connection); return; }
+        const usedSeats = new Set(network.roster.map(candidate => candidate.id));
+        let seat = 1;
+        while (usedSeats.has(`p${seat}`) && seat < 4) seat++;
+        if (seat >= 4) { heartsOfferSpectator(connection); return; }
+        const player = { id: `p${seat}`, name: `Player ${seat + 1}` };
+        network.roster.push(player); network.connections.set(player.id, connection);
+        connection.on('data', message => heartsHandleHostMessage(network, player.id, connection, message));
+        let welcomed = false;
+        const welcome = () => {
+          if (welcomed || heartsNetwork !== network) return;
+          welcomed = true;
+          if (network.started) {
+            const startedPlayer = game && game.players.some(candidate => candidate.id === player.id);
+            if (startedPlayer) connection.send({ type: 'hearts-start', playerId: player.id, state: heartsPublicState(player.id) });
+            else heartsOfferSpectator(connection);
+          } else {
+            connection.send(heartsLobbyState(player.id)); heartsBroadcastLobby();
+          }
+        };
+        connection.on('open', welcome);
+        if (connection.open) welcome();
+        connection.on('close', () => {
+          if (heartsNetwork !== network || network.connections.get(player.id) !== connection) return;
+          network.connections.delete(player.id);
+          if (!network.started) { network.roster = network.roster.filter(candidate => candidate.id !== player.id); heartsBroadcastLobby(); }
+          else if (game && game.phase !== 'over') { heartsApplyAction(player.id, { type: 'resign' }); heartsBroadcastState(); }
+        });
+        heartsRender(); heartsUpdateStatus();
+      });
+      peerConnection.on('error', error => {
+        if (heartsNetwork !== network) return;
+        if (error.type === 'unavailable-id' && attempt < 3) hostHeartsGame(attempt + 1);
+        else setStatus('Could Not Create Game - Try Again', true);
+      });
+      panelEl.hidden = false; heartsRender(); heartsUpdateStatus();
+    }
+
+    function joinHeartsGame() {
+      const code = document.getElementById('join-code').value.trim().toUpperCase();
+      if (!code) { setStatus('Enter a Game Code', true); return; }
+      leaveGame(); localMode = false; spectatorMode = false;
+      const network = heartsNetwork = { role: 'joining', playerId: null, roster: [], connection: null, awaitingAction: false };
+      setStatus('Joining Hearts...');
+      const p = new Peer(); peer = p;
+      p.on('open', () => {
+        const connection = p.connect(PEER_PREFIX + code, { reliable: true }); network.connection = connection;
+        connection.on('data', message => {
+          if (message.type === 'hearts-spectator-offer') {
+            if (confirm('This game is full. Would you like to spectate?')) connection.send({ type: 'hearts-spectator-accept' });
+            else { connection.send({ type: 'spectator-decline' }); leaveGame(); setStatus('Game Is Full', true); }
+          } else if (message.type === 'hearts-lobby' || message.type === 'hearts-start' || message.type === 'hearts-state') {
+            heartsHandleClientMessage(network, connection, message);
+          } else if (message.type === 'full') { leaveGame(); setStatus('That Game Is Already Full', true); }
+        });
+        connection.on('close', () => {
+          if (heartsNetwork !== network) return;
+          if (network.role === 'client' && game && game.phase !== 'over') { game.phase = 'over'; phase = 'over'; game.result = 'Host Disconnected'; heartsRender(); heartsUpdateStatus(); }
+        });
+      });
+      p.on('error', error => {
+        if (heartsNetwork !== network) return;
+        leaveGame(); setStatus(error.type === 'peer-unavailable' ? 'No Game Found' : 'Could Not Connect - Try Again', true);
+      });
+      setTimeout(() => {
+        if (heartsNetwork === network && network.role === 'joining') { leaveGame(); setStatus('Host Did Not Respond - Check the Game Code', true); }
+      }, 15000);
+    }
+
+    function heartsStartHostedGame() {
+      if (!heartsNetwork || heartsNetwork.role !== 'host' || heartsNetwork.started || heartsNetwork.roster.length !== 4) return;
+      const joined = heartsNetwork.roster.filter(player => player.id === 'p0' || heartsNetwork.connections.get(player.id)?.open);
+      if (joined.length !== 4) return;
+      heartsNetwork.allowSpectators = heartsAllowSpectatorsEl.checked;
+      heartsNetwork.started = true;
+      game = heartsNewGame(joined); phase = 'select'; heartsStartHand();
+      heartsRender(); heartsUpdateStatus();
+      heartsBroadcastState();
+    }
+
+    function heartsPerformAction(action) {
+      if (!game || !heartsNetwork) return;
+      const playerId = heartsControlPlayerId();
+      if (heartsNetwork.role === 'client') {
+        if (heartsNetwork.awaitingAction || !heartsNetwork.connection) return;
+        heartsNetwork.awaitingAction = true;
+        heartsNetwork.connection.send({ type: 'hearts-action', action });
+        heartsRender(); heartsUpdateStatus();
+      } else if (heartsNetwork.role === 'host' || heartsNetwork.role === 'local') {
+        heartsApplyAction(playerId, action);
+        heartsSelectedPass.clear();
+        heartsRender(); heartsUpdateStatus();
+        if (heartsNetwork.role === 'host') heartsBroadcastState();
+      }
+    }
+
+    function heartsResign() {
+      const playerId = heartsControlPlayerId();
+      if (!game || !playerId || game.phase === 'over') return;
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (player && confirm(`${player.name} resign?`)) heartsPerformAction({ type: 'resign' });
+    }
+
+    function heartsRender(viewerId, isSpectator = false) {
+      panelEl.classList.remove('no-repeats-active');
+      panelEl.classList.add('hearts-active');
+      noRepeatsPanelEl.hidden = true;
+      heartsPanelEl.hidden = false; heartsLobbyEl.hidden = !!game; heartsGameEl.hidden = !game;
+      boardEl.hidden = true; fourPanelEl.hidden = true;
+      capturedEl.w.hidden = true; capturedEl.b.hidden = true;
+      clockBarEl.hidden = true; reviewBtnEl.hidden = true; reviewBarEl.hidden = true; rematchBtnEl.hidden = true;
+      heartsLobbyPlayersEl.innerHTML = ''; heartsPlayersEl.innerHTML = ''; heartsTableEl.innerHTML = '';
+      heartsHandEl.innerHTML = ''; heartsActionsEl.innerHTML = '';
+      const isHostLobby = !game && heartsNetwork && heartsNetwork.role === 'host';
+      heartsPlayBtnEl.hidden = !isHostLobby;
+      document.getElementById('hearts-spectators-label').hidden = !isHostLobby;
+      if (!game) {
+        const roster = heartsNetwork ? heartsNetwork.roster || [] : [];
+        heartsLobbyCountEl.textContent = `${roster.length} / 4 players joined`;
+        heartsPlayBtnEl.disabled = !isHostLobby || roster.length !== 4 || roster.some(player => player.id !== 'p0' && !heartsNetwork.connections.get(player.id)?.open);
+        for (const player of roster) { const row = document.createElement('div'); row.className='nr-player'; row.textContent=player.name; heartsLobbyPlayersEl.appendChild(row); }
+        return;
+      }
+      const activeId = heartsControlPlayerId();
+      const publicViewerId = viewerId || (heartsNetwork && heartsNetwork.role === 'host' ? heartsNetwork.playerId : activeId);
+      const text = game.phase === 'passing' ? `Pass three cards ${game.passDirection}.` :
+        game.phase === 'turn' ? `${game.players.find(player => player.id === game.currentPlayerId)?.name || 'A player'} to play.` :
+        game.phase === 'between' ? 'Hand complete.' : game.result || '';
+      heartsStatusEl.textContent = text;
+      heartsRoundLabelEl.textContent = `Hand ${game.handNo}`;
+      heartsPassLabelEl.textContent = game.passDirection === 'hold' ? 'No pass' : `Pass ${game.passDirection}`;
+      for (const player of game.players) {
+        const row = document.createElement('div'); row.className='hearts-player';
+        if (player.id === game.currentPlayerId || (game.phase === 'passing' && player.id === activeId)) row.classList.add('current');
+        const head = document.createElement('div'); head.className='hearts-player-line';
+        const score = document.createElement('span'); score.textContent=`${player.name} · ${player.score} points`;
+        const count = document.createElement('span'); count.textContent=`${player.handCount ?? player.hand.length} cards · ${player.tricks.length / 4} tricks`;
+        head.append(score,count); row.appendChild(head); heartsPlayersEl.appendChild(row);
+      }
+      for (const play of game.trick) {
+        const card = document.createElement('span'); card.className='hearts-card'+('HD'.includes(play.card.suit)?' red':'');
+        card.textContent=`${game.players.find(player=>player.id===play.playerId)?.name}: ${heartsCardLabel(play.card)}`;
+        heartsTableEl.appendChild(card);
+      }
+      const player = game.players.find(candidate => candidate.id === publicViewerId);
+      const canControl = !!player && !isSpectator && heartsNetwork && !heartsNetwork.awaitingAction &&
+        (localMode || heartsNetwork.role === 'host' || heartsNetwork.role === 'client' && heartsNetwork.playerId === player.id);
+      if (player && canControl) {
+        let visibleHand = player.hand;
+        if (game.phase === 'passing' && heartsNetwork.role === 'client' && Object.keys(game.passSelections || {}).length) visibleHand = player.hand;
+        for (const cardData of visibleHand) {
+          const button=document.createElement('button'); button.type='button'; button.className='hearts-card'+('HD'.includes(cardData.suit)?' red':'');
+          button.textContent=heartsCardLabel(cardData);
+          if (heartsSelectedPass.has(cardData.id)) button.classList.add('selected');
+          if (game.phase === 'passing' && (localMode ? !!game.passSelections[player.id] : !!game.passSubmitted)) button.disabled=true;
+          if (game.phase === 'passing') {
+            button.addEventListener('click',()=>{ if(heartsSelectedPass.has(cardData.id)) heartsSelectedPass.delete(cardData.id); else if(heartsSelectedPass.size<3) heartsSelectedPass.add(cardData.id); heartsRender(viewerId,isSpectator); });
+          } else if (game.phase === 'turn' && player.id === game.currentPlayerId) {
+            const legal = heartsLegalCards(player.id).some(candidate=>candidate.id===cardData.id);
+            button.disabled=!legal;
+            button.addEventListener('click',()=>heartsPerformAction({type:'play',cardId:cardData.id}));
+          } else button.disabled=true;
+          heartsHandEl.appendChild(button);
+        }
+      }
+      if (game.phase === 'passing' && player && canControl && !(localMode ? game.passSelections[player.id] : game.passSubmitted) && heartsSelectedPass.size===3) {
+        const pass=document.createElement('button'); pass.type='button'; pass.className='btn'; pass.textContent='Pass Cards';
+        pass.addEventListener('click',()=>heartsPerformAction({type:'pass',cardIds:[...heartsSelectedPass]})); heartsActionsEl.appendChild(pass);
+      }
+      if (game.phase === 'between' && (localMode || heartsNetwork && heartsNetwork.role==='host')) {
+        const next=document.createElement('button'); next.type='button'; next.className='btn'; next.textContent='Next Hand';
+        next.addEventListener('click',()=>heartsPerformAction({type:'next'})); heartsActionsEl.appendChild(next);
+      }
+      const canResign = !!player && canControl && game.phase !== 'over';
+      extraControlsEl.hidden = !canResign; resignBtnEl.hidden = !canResign; claimBtnEl.hidden=true;
+      setLog((game.logLines||[]).slice(-16)); updateClockDisplay();
+    }
+
+    function heartsUpdateStatus() {
+      if (!game) {
+        if (heartsNetwork && heartsNetwork.role === 'host') setStatus(`Game Code: ${heartsNetwork.code} · ${heartsNetwork.roster.length} / 4 players`);
+        else if (heartsNetwork && heartsNetwork.role === 'joining') setStatus('Joining Hearts...');
+        else setStatus('Waiting for Hearts to start');
+      } else if (game.phase === 'over') setStatus(game.result || 'Hearts over');
+      else if (game.phase === 'between') setStatus('Hand complete · ready for the next hand');
+      else if (game.phase === 'passing') setStatus(localMode || heartsNetwork && heartsNetwork.role==='client' && !heartsNetwork.awaitingAction && !game.passSubmitted ? 'Select three cards to pass' : 'Waiting for players to pass');
+      else {
+        const player = game.players.find(candidate => candidate.id === game.currentPlayerId);
+        setStatus(player && heartsControlPlayerId() === player.id ? 'Your turn · Play a card' : `${player ? player.name : 'A player'} to play`);
       }
     }
 
@@ -5537,6 +6136,10 @@
 
     function resignCurrentGame() {
       if (!game || phase !== 'select' || spectatorMode) return;
+      if (isHearts()) {
+        heartsResign();
+        return;
+      }
       if (isNoRepeats()) {
         nrPlayerResign();
         return;
@@ -5556,6 +6159,10 @@
     }
 
     function updateStatus() {
+      if (isHearts()) {
+        heartsUpdateStatus();
+        return;
+      }
       if (isNoRepeats()) {
         updateNoRepeatsStatus();
         return;
@@ -6426,11 +7033,17 @@
     }
 
     function render() {
+      if (isHearts()) {
+        heartsRender();
+        return;
+      }
       if (isNoRepeats()) {
         renderNoRepeats();
         return;
       }
       panelEl.classList.remove('no-repeats-active');
+      panelEl.classList.remove('hearts-active');
+      heartsPanelEl.hidden = true;
       noRepeatsPanelEl.hidden = true;
       boardEl.hidden = false;
       logEl.hidden = false;
@@ -6454,6 +7067,7 @@
       rowCallLayoutEl.classList.remove('active', 'choosing-line');
       boardEl.classList.remove('four');
       boardEl.classList.remove('teeko');
+      panelEl.classList.remove('hearts-active', 'no-repeats-active');
       boardEl.classList.remove('cats');
       fourPanelEl.hidden = true;
       extraControlsEl.hidden = true;
@@ -6835,6 +7449,9 @@
       fourNetwork = null;
       const oldNoRepeatsNetwork = noRepeatsNetwork;
       noRepeatsNetwork = null;
+      const oldHeartsNetwork = heartsNetwork;
+      heartsNetwork = null;
+      heartsSelectedPass.clear();
       spectatorMode = false;
       clearTimeout(handoffTimer);
       handoffTimer = null;
@@ -6859,6 +7476,12 @@
       if (oldNoRepeatsNetwork && oldNoRepeatsNetwork.spectators) {
         for (const c of oldNoRepeatsNetwork.spectators.values()) if (c && c.open) c.close();
       }
+      if (oldHeartsNetwork && oldHeartsNetwork.connections) {
+        for (const c of oldHeartsNetwork.connections.values()) if (c && c.open) c.close();
+      }
+      if (oldHeartsNetwork && oldHeartsNetwork.spectators) {
+        for (const c of oldHeartsNetwork.spectators) if (c && c.open) c.close();
+      }
       for (const c of hostedSpectators) if (c && c.open) c.close();
       hostedSpectators = new Set();
       hostAllowsSpectators = false;
@@ -6871,10 +7494,12 @@
       panelEl.hidden = true;
       fourPanelEl.hidden = true;
       noRepeatsPanelEl.hidden = true;
+      heartsPanelEl.hidden = true;
       extraControlsEl.hidden = true;
       clockBarEl.hidden = true;
       capturedEl.w.hidden = false;
       capturedEl.b.hidden = false;
+      panelEl.classList.remove('hearts-active', 'no-repeats-active');
       boardEl.classList.remove('four');
       boardEl.classList.remove('teeko');
     }
@@ -7052,6 +7677,19 @@
           if (myColor === 'b' || spectatorMode) finishNetworkTimeout(msg.color);
         } else if (msg.type === 'resign' && game && !spectatorMode && msg.color === opponent(myColor)) {
           finishTwoPlayerResignation(msg.color, true);
+        } else if (msg.type === 'hearts-spectator-offer') {
+          if (confirm('This game is full. Would you like to spectate?')) {
+            heartsNetwork = { role: 'joining', playerId: null, roster: [], connection: c, awaitingAction: false };
+            setGameKind('hearts');
+            c.send({ type: 'hearts-spectator-accept' });
+          } else {
+            c.send({ type: 'spectator-decline' }); leaveGame(); setStatus('Game Is Full', true);
+          }
+        } else if (['hearts-lobby', 'hearts-start', 'hearts-state'].includes(msg.type)) {
+          if (!heartsNetwork || heartsNetwork.connection !== c) {
+            heartsNetwork = { role: 'joining', playerId: null, roster: [], connection: c, awaitingAction: false };
+          }
+          heartsHandleClientMessage(heartsNetwork, c, msg);
         } else if (msg.type === 'nr-spectator-offer') {
           if (confirm('This game is full. Would you like to spectate?')) {
             noRepeatsNetwork = { role: 'joining', playerId: null, roster: [], connection: c, awaitingAction: false };
@@ -7135,6 +7773,9 @@
         }
       });
       c.on('close', () => {
+        if (heartsNetwork && heartsNetwork.connection === c && heartsNetwork.role === 'client' && game && game.phase !== 'over') {
+          game.phase = 'over'; phase = 'over'; game.result = 'Host Disconnected'; heartsRender(); heartsUpdateStatus();
+        }
         if (noRepeatsNetwork && noRepeatsNetwork.connection === c &&
           noRepeatsNetwork.role === 'client' && game && phase !== 'over') {
           game.result = 'Host Disconnected'; game.nrPhase = 'over'; phase = 'over';
@@ -7282,6 +7923,10 @@
     }
 
     function joinGame() {
+      if (isHearts()) {
+        joinHeartsGame();
+        return;
+      }
       if (isNoRepeats()) {
         joinNoRepeatsGame();
         return;
@@ -7323,18 +7968,19 @@
     function openTimeModal(action) {
       pendingAction = action;
       const noRepeatsLocal = isNoRepeats() && action === 'local';
+      const heartsLocal = isHearts() && action === 'local';
       noRepeatsLocalPlayersEl.hidden = !noRepeatsLocal;
-      timePresetsEl.hidden = noRepeatsLocal;
-      timeFieldsEl.hidden = noRepeatsLocal;
-      if (noRepeatsLocal) {
+      timePresetsEl.hidden = noRepeatsLocal || heartsLocal;
+      timeFieldsEl.hidden = noRepeatsLocal || heartsLocal;
+      if (noRepeatsLocal || heartsLocal) {
         timeFieldsEl.innerHTML = '';
-        timeTitleEl.textContent = 'No Repeats';
-        timeHelpEl.textContent = 'Choose 2 to 8 players for a local pass-and-play game.';
+        timeTitleEl.textContent = heartsLocal ? 'Hearts' : 'No Repeats';
+        timeHelpEl.textContent = heartsLocal ? 'Play a four-player pass-and-play game.' : 'Choose 2 to 8 players for a local pass-and-play game.';
         syncModeOptionEl.hidden = true;
         memoryModeOptionEl.hidden = true;
         spectatorsOptionEl.hidden = true;
         timeModalEl.hidden = false;
-        noRepeatsPlayerCountEl.focus();
+        if (noRepeatsLocal) noRepeatsPlayerCountEl.focus();
         return;
       }
       timeFieldsEl.innerHTML = '';
@@ -7517,6 +8163,8 @@
       reviewBtnEl.hidden = true;
       fourPanelEl.hidden = true;
       noRepeatsPanelEl.hidden = true;
+      heartsPanelEl.hidden = true;
+      panelEl.classList.remove('hearts-active', 'no-repeats-active');
       boardEl.hidden = false;
       extraControlsEl.hidden = true;
       clockBarEl.hidden = true;
@@ -7601,7 +8249,8 @@
       openTimeModal('local');
     });
     document.getElementById('host-btn').addEventListener('click', () => {
-      if (isNoRepeats()) hostNoRepeatsGame();
+      if (isHearts()) hostHeartsGame();
+      else if (isNoRepeats()) hostNoRepeatsGame();
       else openTimeModal('host');
     });
     document.getElementById('join-btn').addEventListener('click', joinGame);
@@ -7611,6 +8260,12 @@
     timeCancelEl.addEventListener('click', closeTimeModal);
     timeStartEl.addEventListener('click', () => {
       const action = pendingAction;
+      if (isHearts() && action === 'local') {
+        timeModalEl.hidden = true;
+        pendingAction = null;
+        newHeartsLocalGame();
+        return;
+      }
       if (isNoRepeats() && action === 'local') {
         timeModalEl.hidden = true;
         pendingAction = null;
@@ -7650,6 +8305,7 @@
     });
     resignBtnEl.addEventListener('click', resignCurrentGame);
     noRepeatsPlayBtnEl.addEventListener('click', nrStartHostedGame);
+    heartsPlayBtnEl.addEventListener('click', heartsStartHostedGame);
     document.getElementById('nr-hit-btn').addEventListener('click', () => nrPerformAction({ type: 'hit' }));
     document.getElementById('nr-stay-btn').addEventListener('click', () => nrPerformAction({ type: 'stay' }));
     document.getElementById('nr-next-round-btn').addEventListener('click', nrStartNextRound);
