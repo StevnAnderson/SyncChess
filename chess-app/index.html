@@ -298,6 +298,8 @@
       display: none;
     }
 
+    .board-panel.no-repeats-active .board { display: none; }
+
     .board {
       display: grid;
       grid-template-columns: repeat(8, 1fr);
@@ -490,6 +492,22 @@
     .row-call-top button:focus-visible, .row-call-left button:focus-visible { filter: brightness(1.15); }
     .row-call-top button:disabled, .row-call-left button:disabled { visibility: hidden; cursor: default; }
     .game-menu-heading { padding: 0.6rem 0.8rem 0.25rem; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .no-repeats-panel { width: min(100%, 760px); }
+    .no-repeats-panel[hidden], .nr-section[hidden] { display: none; }
+    .nr-lobby, .nr-game { background: var(--bg-color); border-radius: 10px; padding: 1rem; }
+    .nr-player-list, .nr-players { display: grid; gap: 0.6rem; }
+    .nr-player-list { margin: 0.8rem 0; }
+    .nr-player { padding: 0.7rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    .nr-player.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .nr-player.busted, .nr-player.forfeited { opacity: 0.55; }
+    .nr-player-title { display: flex; justify-content: space-between; gap: 0.5rem; font-weight: 700; }
+    .nr-cards { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
+    .nr-card { min-width: 2rem; padding: 0.25rem 0.4rem; text-align: center; border-radius: 5px; color: #171725; background: #f2e7c9; font-weight: 800; }
+    .nr-card.special { background: #c8b4ef; }
+    .nr-card.bonus { background: #a8e2c2; }
+    .nr-controls, .nr-choice-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.8rem; }
+    .nr-controls[hidden], .nr-choice-buttons[hidden] { display: none; }
+    .nr-status { text-align: center; color: var(--text-muted); margin: 0.6rem 0; }
 
     .board.four .piece.b {
       color: #5aa9ff;
@@ -996,6 +1014,28 @@
       </div>
     </div>
     <div class="board-panel" id="board-panel" hidden>
+      <div class="no-repeats-panel" id="no-repeats-panel" hidden>
+        <section class="nr-lobby nr-section" id="nr-lobby" hidden>
+          <h2>No Repeats Lobby</h2>
+          <div class="nr-status" id="nr-lobby-count">1 / 8 players</div>
+          <div class="nr-player-list" id="nr-lobby-players"></div>
+          <label><input id="nr-allow-spectators" type="checkbox"> Allow spectators</label>
+          <div class="nr-controls"><button class="btn" id="nr-play-btn" type="button" disabled>Play</button></div>
+        </section>
+        <section class="nr-game nr-section" id="nr-game" hidden>
+          <div class="nr-player-title"><span id="nr-round-label">Round 1</span><span id="nr-deck-count"></span></div>
+          <div class="nr-status" id="nr-game-status"></div>
+          <div class="nr-players" id="nr-players"></div>
+          <div class="nr-controls" id="nr-turn-controls" hidden>
+            <button class="btn" id="nr-hit-btn" type="button">Hit</button>
+            <button class="btn secondary" id="nr-stay-btn" type="button">Stay</button>
+          </div>
+          <div class="nr-choice-buttons" id="nr-choice-buttons" hidden></div>
+          <div class="nr-controls" id="nr-between-controls" hidden>
+            <button class="btn" id="nr-next-round-btn" type="button">Next Round</button>
+          </div>
+        </section>
+      </div>
       <div class="four-panel" id="four-panel" hidden></div>
       <div class="clock-bar" id="clock-bar" hidden>
         <div class="clock" id="clock-w">
@@ -1178,6 +1218,18 @@
       </ul>
     </div>
 
+    <div class="rules-panel" id="rules-norepeats" hidden>
+      <h2>How No Repeats Works</h2>
+      <ul>
+        <li>The deck has one 0, one 1, two 2s, continuing up to twelve 12s, plus special cards. Each player starts a round with one card.</li>
+        <li>On your turn, choose Hit or Stay. If you collect two number cards of the same value, you bust. Bonus and special cards do not count as numbers.</li>
+        <li>Reach seven numbered cards without busting to end the round and earn 15 bonus points. Special and bonus cards do not count toward seven. When all players bust or stay, non-busted players score their number cards plus bonuses; x2 doubles only their number-card sum.</li>
+        <li>Freeze forces an active player to stay. Flip 3 makes a selected active player hit three times in a row, stopping if they bust. Extra Life can cancel one bust, and +2 through +10 cards add their value.</li>
+        <li>Cards from the round go to the discard pile. The deck keeps running between rounds and the discard is shuffled back only when a draw is needed and the deck is empty.</li>
+        <li>Once a player scores over 200, finish the round; the highest score wins.</li>
+      </ul>
+    </div>
+
     <div class="rules-panel" id="rules-four" hidden>
       <h2>How 4P Chess Works</h2>
       <ul>
@@ -1231,6 +1283,12 @@
         <button type="button" data-minutes="5" data-increment="3">5 + 3</button>
         <button type="button" data-minutes="10" data-increment="0">10 + 0</button>
       </div>
+      <label id="no-repeats-local-players" hidden>Players
+        <select id="no-repeats-player-count">
+          <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+          <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+        </select>
+      </label>
       <label id="sync-mode-option" hidden><input id="sync-mode" type="checkbox"> Play in Sync mode (both players choose before moves resolve)</label>
       <label id="memory-mode-option" hidden><input id="memory-mode" type="checkbox"> Play in Memory mode (pieces are hidden while you play)</label>
       <label id="spectators-option" hidden><input id="allow-spectators" type="checkbox"> Allow Spectators</label>
@@ -1276,7 +1334,7 @@
       ] },
       { name: 'Other Games', games: [
         { id: 'amazons', name: 'Amazons' }, { id: 'cats', name: 'Cats and Dogs' },
-        { id: 'pferde', name: 'Pferdeappel' }, { id: 'rowcall', name: 'Row Call' },
+        { id: 'norepeats', name: 'No Repeats' }, { id: 'pferde', name: 'Pferdeappel' }, { id: 'rowcall', name: 'Row Call' },
         { id: 'teeko', name: 'Teeko' }
       ] }
     ];
@@ -1308,12 +1366,27 @@
       teeko: document.getElementById('rules-teeko'),
       threecheck: document.getElementById('rules-threecheck'),
       amazons: document.getElementById('rules-amazons'), pferde: document.getElementById('rules-pferde'),
-      cats: document.getElementById('rules-cats'), rowcall: document.getElementById('rules-rowcall')
+      cats: document.getElementById('rules-cats'), rowcall: document.getElementById('rules-rowcall'),
+      norepeats: document.getElementById('rules-norepeats')
     };
     const handoffEl = document.getElementById('handoff');
     const handoffTitleEl = document.getElementById('handoff-title');
     const handoffBtnEl = document.getElementById('handoff-btn');
     const panelEl = document.getElementById('board-panel');
+    const noRepeatsPanelEl = document.getElementById('no-repeats-panel');
+    const noRepeatsLobbyEl = document.getElementById('nr-lobby');
+    const noRepeatsGameEl = document.getElementById('nr-game');
+    const noRepeatsLobbyCountEl = document.getElementById('nr-lobby-count');
+    const noRepeatsLobbyPlayersEl = document.getElementById('nr-lobby-players');
+    const noRepeatsAllowSpectatorsEl = document.getElementById('nr-allow-spectators');
+    const noRepeatsPlayBtnEl = document.getElementById('nr-play-btn');
+    const noRepeatsRoundLabelEl = document.getElementById('nr-round-label');
+    const noRepeatsDeckCountEl = document.getElementById('nr-deck-count');
+    const noRepeatsGameStatusEl = document.getElementById('nr-game-status');
+    const noRepeatsPlayersEl = document.getElementById('nr-players');
+    const noRepeatsTurnControlsEl = document.getElementById('nr-turn-controls');
+    const noRepeatsChoiceButtonsEl = document.getElementById('nr-choice-buttons');
+    const noRepeatsBetweenControlsEl = document.getElementById('nr-between-controls');
     const turnEl = document.getElementById('turn-indicator');
     const promoEl = document.getElementById('promotion');
     const logEl = document.getElementById('turn-log');
@@ -1347,6 +1420,8 @@
     const timeHelpEl = document.getElementById('time-help');
     const timeFieldsEl = document.getElementById('time-fields');
     const timePresetsEl = document.getElementById('time-presets');
+    const noRepeatsLocalPlayersEl = document.getElementById('no-repeats-local-players');
+    const noRepeatsPlayerCountEl = document.getElementById('no-repeats-player-count');
     const syncModeOptionEl = document.getElementById('sync-mode-option');
     const syncModeInputEl = document.getElementById('sync-mode');
     const memoryModeOptionEl = document.getElementById('memory-mode-option');
@@ -1380,6 +1455,7 @@
     let peer = null;
     let conn = null;
     let fourNetwork = null;
+    let noRepeatsNetwork = null;
     let spectatorMode = false;
     let hostedSpectators = new Set();
     let hostAllowsSpectators = false;
@@ -1422,6 +1498,7 @@
     const isPferde = () => gameKind === 'pferde';
     const isCats = () => gameKind === 'cats';
     const isRowCall = () => gameKind === 'rowcall';
+    const isNoRepeats = () => gameKind === 'norepeats';
     const isTeeko = () => gameKind === 'teeko';
     const botsAllowed = () => localMode && gameKind === 'chess';
     const botActive = () => botsAllowed() && !isSimultaneous() && botSeats.size > 0;
@@ -1622,6 +1699,10 @@
     }
 
     function newGame(controls = null) {
+      if (isNoRepeats()) {
+        newNoRepeatsLocalGame(2);
+        return;
+      }
       if (isRowCall()) {
         newRowCallGame(controls);
         return;
@@ -2090,6 +2171,830 @@
         (!localMode && game.turn !== myColor) || game.rowCallStage !== 'square' || !game.offer) return;
       const inLine = game.offer.axis === 'row' ? r === game.offer.index : c === game.offer.index;
       if (inLine && !game.board[r][c]) lockIn({ rowCall: 'square', r, c }, null);
+    }
+
+    function nrMakeDeck() {
+      const deck = [];
+      let id = 0;
+      deck.push({ id: `nr${id++}`, type: 'number', value: 0 });
+      for (let value = 1; value <= 12; value++) {
+        for (let copies = 0; copies < value; copies++) deck.push({ id: `nr${id++}`, type: 'number', value });
+      }
+      for (let i = 0; i < 3; i++) deck.push({ id: `nr${id++}`, type: 'freeze' });
+      for (let i = 0; i < 3; i++) deck.push({ id: `nr${id++}`, type: 'flip3' });
+      for (let i = 0; i < 3; i++) deck.push({ id: `nr${id++}`, type: 'extraLife' });
+      deck.push({ id: `nr${id++}`, type: 'x2' });
+      for (const value of [2, 4, 6, 8, 10]) deck.push({ id: `nr${id++}`, type: 'bonus', value });
+      return nrShuffle(deck);
+    }
+
+    function nrShuffle(cards) {
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+      }
+      return cards;
+    }
+
+    function nrCardLabel(card) {
+      if (card.type === 'number') return String(card.value);
+      if (card.type === 'bonus') return `+${card.value}`;
+      if (card.type === 'x2') return 'x2';
+      if (card.type === 'flip3') return 'Flip 3';
+      if (card.type === 'extraLife') return 'Extra Life';
+      return 'Freeze';
+    }
+
+    function nrIsActive(player) {
+      return !!player && !player.busted && !player.stayed && !player.forfeited;
+    }
+
+    function nrNumberedCardCount(player) {
+      return player ? player.hand.filter(card => card.type === 'number').length : 0;
+    }
+
+    function nrActivePlayers() {
+      return game ? game.players.filter(nrIsActive) : [];
+    }
+
+    function nrDrawFromDeck() {
+      if (!game.deck.length && game.discard.length) {
+        game.deck = nrShuffle(game.discard.splice(0));
+        game.logLines.push('The discard pile was shuffled to make a new draw pile.');
+      }
+      return game.deck.pop() || null;
+    }
+
+    function nrNewGame(players) {
+      const roster = players.map((player, index) => ({
+        id: player.id || `p${index}`, name: player.name || `Player ${index + 1}`,
+        score: 0, roundPoints: 0, hand: [], lastHand: [], busted: false,
+        stayed: false, forfeited: false
+      }));
+      return {
+        players: roster, deck: nrMakeDeck(), discard: [], round: 0,
+        nrPhase: 'between', currentPlayerId: null, pendingChoice: null,
+        initialPlayers: [], logLines: [], lastRound: [], result: null,
+        sevenCardWinnerId: null, deckCount: 0
+      };
+    }
+
+    function newNoRepeatsLocalGame(count) {
+      leaveGame();
+      localMode = true;
+      spectatorMode = false;
+      noRepeatsNetwork = { role: 'local', playerId: 'p0', roster: [] };
+      game = nrNewGame(Array.from({ length: Math.max(2, Math.min(8, count)) }, (_, i) => ({
+        id: `p${i}`, name: `Player ${i + 1}`
+      })));
+      phase = 'select';
+      panelEl.hidden = false;
+      nrStartRound();
+      render();
+      updateStatus();
+    }
+
+    function nrStartRound() {
+      if (!game) return;
+      const remaining = game.players.filter(player => !player.forfeited);
+      if (remaining.length < 2) {
+        const winner = remaining[0];
+        game.result = winner ? `No Repeats - ${winner.name} Wins` : 'No Repeats - No Winner';
+        game.nrPhase = 'over'; phase = 'over';
+        game.logLines.push(game.result);
+        return;
+      }
+      game.round++;
+      game.currentPlayerId = null;
+      game.pendingChoice = null;
+      game.sevenCardWinnerId = null;
+      game.initialPlayers = remaining.map(player => player.id);
+      game.lastRound = [];
+      for (const player of game.players) {
+        player.hand = [];
+        player.busted = false;
+        player.stayed = false;
+        player.roundPoints = 0;
+      }
+      game.nrPhase = 'initial';
+      game.logLines.push(`Round ${game.round} begins. Each player is dealt one card.`);
+      nrResolveInitialEffect(0);
+    }
+
+    function nrResolveInitialEffect(index) {
+      if (!game || game.nrPhase === 'over' || game.nrPhase === 'between') return;
+      if (index >= game.initialPlayers.length) {
+        game.initialPlayers = [];
+        const first = nrActivePlayers()[0];
+        if (!first) { nrEndRound(); return; }
+        game.currentPlayerId = first.id;
+        game.nrPhase = 'turn';
+        return;
+      }
+      const playerId = game.initialPlayers[index];
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!player || player.busted || player.forfeited) {
+        nrResolveInitialEffect(index + 1);
+        return;
+      }
+      const card = nrDrawFromDeck();
+      if (!card) {
+        nrEndRound(null, 'The draw pile and discard pile are empty.');
+        return;
+      }
+      player.hand.push(card);
+      game.logLines.push(`${player.name} was dealt ${nrCardLabel(card)}.`);
+      if (['freeze', 'flip3', 'extraLife'].includes(card.type)) {
+        nrResolveSpecial(player.id, card, { kind: 'initial', next: index + 1 });
+      } else {
+        nrResolveInitialEffect(index + 1);
+      }
+    }
+
+    function nrQueueChoice(type, chooserId, options, data, resume) {
+      if (!options.length) {
+        if (type === 'extraLife' && data.card) {
+          game.discard.push(data.card);
+          game.logLines.push(`${game.players.find(player => player.id === chooserId).name} had no eligible player for Extra Life; it was discarded.`);
+        }
+        nrAfterEffect(data.ownerId || chooserId, resume);
+        return;
+      }
+      if (options.length === 1) {
+        nrResolveChoice(options[0].id, { type, chooserId, options: options.map(player => player.id), data, resume });
+        return;
+      }
+      game.pendingChoice = { type, chooserId, options: options.map(player => player.id), data, resume };
+      game.currentPlayerId = chooserId;
+      game.nrPhase = 'choice';
+    }
+
+    function nrResolveSpecial(ownerId, card, resume) {
+      const owner = game.players.find(player => player.id === ownerId);
+      if (!owner) { nrContinue(resume); return; }
+      if (card.type === 'freeze') {
+        nrQueueChoice('freeze', ownerId, nrActivePlayers(), { ownerId, card }, resume);
+      } else if (card.type === 'flip3') {
+        nrQueueChoice('flip3', ownerId, nrActivePlayers(), { ownerId, card }, resume);
+      } else if (card.type === 'extraLife') {
+        const cardIndex = owner.hand.findIndex(candidate => candidate.id === card.id);
+        if (cardIndex >= 0) owner.hand.splice(cardIndex, 1);
+        const eligible = nrActivePlayers().filter(player => !player.hand.some(candidate => candidate.type === 'extraLife'));
+        nrQueueChoice('extraLife', ownerId, eligible, { ownerId, card }, resume);
+      } else {
+        nrAfterEffect(ownerId, resume);
+      }
+    }
+
+    function nrResolveChoice(targetId, choice) {
+      const target = game.players.find(player => player.id === targetId);
+      const owner = game.players.find(player => player.id === choice.chooserId);
+      if (!owner) return;
+      game.pendingChoice = null;
+      game.nrPhase = 'resolving';
+      if (!target) { nrContinue(choice.resume); return; }
+      if (choice.type === 'freeze') {
+        if (!nrIsActive(target)) { nrContinue(choice.resume); return; }
+        if (owner.id !== target.id) {
+          const cardIndex = owner.hand.findIndex(candidate => candidate.id === choice.data.card.id);
+          if (cardIndex >= 0) target.hand.push(owner.hand.splice(cardIndex, 1)[0]);
+        }
+        target.stayed = true;
+        game.logLines.push(`${owner.name} froze ${target.name}; they must stay.`);
+        if (nrNumberedCardCount(target) >= 7) nrEndRound(target.id);
+        else nrAfterEffect(owner.id, choice.resume);
+      } else if (choice.type === 'extraLife') {
+        if (!nrIsActive(target) || target.hand.some(card => card.type === 'extraLife')) {
+          game.discard.push(choice.data.card);
+          nrContinue(choice.resume);
+          return;
+        }
+        target.hand.push(choice.data.card);
+        game.logLines.push(`${owner.name} gave Extra Life to ${target.name}.`);
+        if (nrNumberedCardCount(target) >= 7) nrEndRound(target.id);
+        else nrContinue(choice.resume);
+      } else if (choice.type === 'flip3') {
+        if (!nrIsActive(target)) { nrContinue(choice.resume); return; }
+        if (owner.id !== target.id) {
+          const cardIndex = owner.hand.findIndex(candidate => candidate.id === choice.data.card.id);
+          if (cardIndex >= 0) target.hand.push(owner.hand.splice(cardIndex, 1)[0]);
+        }
+        game.logLines.push(`${owner.name} chose ${target.name} to Flip 3.`);
+        if (nrNumberedCardCount(target) >= 7) nrEndRound(target.id);
+        else nrDrawNoRepeatsCard(target.id, {
+          kind: 'flip3', actorId: target.id, targetId: target.id, remaining: 2, after: choice.resume
+        });
+      }
+    }
+
+    function nrAfterEffect(playerId, resume) {
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (nrNumberedCardCount(player) >= 7) {
+        nrEndRound(player.id);
+        return;
+      }
+      nrContinue(resume);
+    }
+
+    function nrDrawNoRepeatsCard(playerId, resume) {
+      if (!game || game.nrPhase === 'over' || game.nrPhase === 'between') return;
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!nrIsActive(player)) { nrContinue(resume); return; }
+      const card = nrDrawFromDeck();
+      if (!card) {
+        nrEndRound(null, 'The draw pile and discard pile are empty.');
+        return;
+      }
+      player.hand.push(card);
+      game.logLines.push(`${player.name} drew ${nrCardLabel(card)}.`);
+      const repeat = card.type === 'number' && player.hand.some(candidate => candidate.id !== card.id &&
+        candidate.type === 'number' && candidate.value === card.value);
+      if (repeat) {
+        const lifeIndex = player.hand.findIndex(candidate => candidate.type === 'extraLife' && candidate.id !== card.id);
+        if (lifeIndex >= 0) {
+          const life = player.hand.splice(lifeIndex, 1)[0];
+          player.hand.splice(player.hand.findIndex(candidate => candidate.id === card.id), 1);
+          game.discard.push(card, life);
+          game.logLines.push(`${player.name} used Extra Life: the repeated ${card.value} and Extra Life were discarded.`);
+        } else {
+          player.busted = true;
+          game.logLines.push(`${player.name} busted on a repeated ${card.value}.`);
+        }
+        nrContinue(resume);
+        return;
+      }
+      if (card.type === 'extraLife' || card.type === 'freeze' || card.type === 'flip3') {
+        nrResolveSpecial(player.id, card, resume);
+        return;
+      }
+      if (nrNumberedCardCount(player) >= 7) {
+        nrEndRound(player.id);
+        return;
+      }
+      nrContinue(resume);
+    }
+
+    function nrContinue(resume) {
+      if (!game || !resume || game.nrPhase === 'over' || game.nrPhase === 'between' || game.nrPhase === 'choice') return;
+      if (resume.kind === 'turn') {
+        nrAdvanceTurn(resume.actorId);
+      } else if (resume.kind === 'initial') {
+        nrResolveInitialEffect(resume.next);
+      } else if (resume.kind === 'flip3') {
+        const target = game.players.find(player => player.id === resume.targetId);
+        if (resume.remaining > 0 && nrIsActive(target)) {
+          nrDrawNoRepeatsCard(target.id, { ...resume, remaining: resume.remaining - 1 });
+        } else {
+          nrContinue(resume.after);
+        }
+      }
+    }
+
+    function nrAdvanceTurn(afterId) {
+      const players = game.players;
+      const start = Math.max(0, players.findIndex(player => player.id === afterId));
+      for (let offset = 1; offset <= players.length; offset++) {
+        const candidate = players[(start + offset) % players.length];
+        if (nrIsActive(candidate)) {
+          game.currentPlayerId = candidate.id;
+          game.nrPhase = 'turn';
+          return;
+        }
+      }
+      nrEndRound();
+    }
+
+    function nrEndRound(sevenId = null, reason = '') {
+      if (!game || game.nrPhase === 'over' || game.nrPhase === 'between') return;
+      game.sevenCardWinnerId = sevenId;
+      const results = [];
+      for (const player of game.players) {
+        const hand = [...player.hand];
+        let points = 0;
+        if (!player.busted && !player.forfeited) {
+          const numbers = hand.filter(card => card.type === 'number').reduce((sum, card) => sum + card.value, 0);
+          const bonuses = hand.filter(card => card.type === 'bonus').reduce((sum, card) => sum + card.value, 0);
+          points = numbers * (hand.some(card => card.type === 'x2') ? 2 : 1) + bonuses;
+          if (player.id === sevenId) points += 15;
+        }
+        player.roundPoints = points;
+        player.score += points;
+        player.lastHand = hand;
+        game.discard.push(...hand);
+        player.hand = [];
+        results.push({ id: player.id, name: player.name, points, busted: player.busted, seven: player.id === sevenId });
+      }
+      game.lastRound = results;
+      game.pendingChoice = null;
+      game.currentPlayerId = null;
+      game.nrPhase = 'between';
+      game.logLines.push(reason || (sevenId
+        ? `${game.players.find(player => player.id === sevenId).name} reached seven cards; the round ended and they receive 15 bonus points.`
+        : 'All active players busted or stayed. The round ended.'));
+      for (const result of results) game.logLines.push(`${result.name}: +${result.points}${result.busted ? ' (busted)' : ''}.`);
+      const remaining = game.players.filter(player => !player.forfeited);
+      if (remaining.length <= 1) {
+        game.result = remaining.length ? `No Repeats - ${remaining[0].name} Wins` : 'No Repeats - No Winner';
+        game.nrPhase = 'over'; phase = 'over';
+        game.logLines.push(game.result);
+      } else if (game.players.some(player => player.score > 200)) {
+        const high = Math.max(...game.players.filter(player => !player.forfeited).map(player => player.score));
+        const leaders = game.players.filter(player => !player.forfeited && player.score === high);
+        game.result = leaders.length === 1 ? `No Repeats - ${leaders[0].name} Wins` : `No Repeats - Tie at ${high}`;
+        game.nrPhase = 'over'; phase = 'over';
+        game.logLines.push(game.result);
+      }
+    }
+
+    function nrApplyAction(playerId, action) {
+      if (!game || game.nrPhase === 'over') return;
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!player) return;
+      if (action.type === 'resign') {
+        if (player.forfeited || game.nrPhase === 'between') return;
+        const pending = game.pendingChoice;
+        const resume = pending && pending.chooserId === playerId ? pending.resume : null;
+        if (pending && pending.chooserId === playerId) game.pendingChoice = null;
+        player.forfeited = true;
+        player.busted = true;
+        player.stayed = true;
+        game.logLines.push(`${player.name} resigned from No Repeats.`);
+        if (resume) nrContinue(resume);
+        else if (game.nrPhase === 'turn' && game.currentPlayerId === playerId) nrAdvanceTurn(playerId);
+        else if (game.nrPhase === 'choice' && game.pendingChoice) {
+          game.pendingChoice.options = game.pendingChoice.options.filter(id => id !== playerId);
+          if (!game.pendingChoice.options.length) {
+            const cancelled = game.pendingChoice;
+            game.pendingChoice = null;
+            if (cancelled.type === 'extraLife') game.discard.push(cancelled.data.card);
+            nrContinue(cancelled.resume);
+          } else if (!nrIsActive(game.players.find(candidate => candidate.id === game.pendingChoice.chooserId))) {
+            nrContinue(game.pendingChoice.resume);
+          }
+        }
+        if (nrActivePlayers().length === 0 && game.nrPhase === 'turn') nrEndRound();
+        return;
+      }
+      if (action.type === 'hit' || action.type === 'stay') {
+        if (game.nrPhase !== 'turn' || game.currentPlayerId !== playerId || !nrIsActive(player)) return;
+        if (action.type === 'stay') {
+          player.stayed = true;
+          game.logLines.push(`${player.name} stayed.`);
+          nrAdvanceTurn(playerId);
+        } else {
+          nrDrawNoRepeatsCard(playerId, { kind: 'turn', actorId: playerId });
+        }
+        return;
+      }
+      if (action.type === 'choose' && game.nrPhase === 'choice' && game.pendingChoice &&
+        game.pendingChoice.chooserId === playerId && game.pendingChoice.options.includes(action.targetId)) {
+        nrResolveChoice(action.targetId, game.pendingChoice);
+      }
+    }
+
+    function nrPublicState() {
+      const state = networkCopy(game);
+      state.deckCount = game.deck.length;
+      state.deck = [];
+      return state;
+    }
+
+    function nrSetPublicGame(state) {
+      game = restoreNetworkCopy(state);
+      game.deck = [];
+      game.deckCount = state.deckCount || 0;
+      phase = game.nrPhase === 'over' ? 'over' : 'select';
+      selected = null;
+      panelEl.hidden = false;
+      noRepeatsPanelEl.hidden = false;
+      render();
+      updateStatus();
+    }
+
+    function nrHandleClientMessage(network, connection, message) {
+      if (!network || !message) return;
+      network.connection = connection;
+      setGameKind('norepeats');
+      if (message.type === 'nr-lobby-state') {
+        network.roster = message.roster || [];
+        if (message.spectator) {
+          network.role = 'spectator';
+          spectatorMode = true;
+        } else {
+          network.role = 'client';
+          network.playerId = message.playerId || network.playerId;
+          spectatorMode = false;
+        }
+        panelEl.hidden = false;
+        render(); updateStatus();
+      } else if (message.type === 'nr-start' || message.type === 'nr-state') {
+        network.role = message.spectator ? 'spectator' : 'client';
+        if (!message.spectator && message.playerId) network.playerId = message.playerId;
+        spectatorMode = network.role === 'spectator';
+        network.awaitingAction = false;
+        nrSetPublicGame(message.state);
+      }
+    }
+
+    function nrCanControl(playerId) {
+      return !!noRepeatsNetwork && (localMode || noRepeatsNetwork.playerId === playerId) && !spectatorMode;
+    }
+
+    function nrControlPlayerId() {
+      if (localMode && game) return game.nrPhase === 'choice' && game.pendingChoice
+        ? game.pendingChoice.chooserId : game.currentPlayerId;
+      if (noRepeatsNetwork && noRepeatsNetwork.role === 'host') return noRepeatsNetwork.playerId || 'p0';
+      return noRepeatsNetwork && noRepeatsNetwork.playerId;
+    }
+
+    function nrPerformAction(action) {
+      if (!game || !noRepeatsNetwork) return;
+      const playerId = nrControlPlayerId();
+      if (noRepeatsNetwork.role === 'client') {
+        if (noRepeatsNetwork.awaitingAction) return;
+        noRepeatsNetwork.awaitingAction = true;
+        noRepeatsNetwork.connection.send({ type: 'nr-action', action });
+        updateStatus(); render();
+      } else if (noRepeatsNetwork.role === 'host' || noRepeatsNetwork.role === 'local') {
+        nrApplyAction(playerId, action);
+        render(); updateStatus();
+        if (noRepeatsNetwork.role === 'host') nrBroadcastState();
+      }
+    }
+
+    function nrBroadcast(message) {
+      if (!noRepeatsNetwork || noRepeatsNetwork.role !== 'host') return;
+      for (const [playerId, connection] of noRepeatsNetwork.connections) {
+        if (connection && connection.open) connection.send({ ...message, playerId });
+      }
+      for (const connection of noRepeatsNetwork.spectators.values()) {
+        if (connection && connection.open) connection.send({ ...message, spectator: true });
+      }
+    }
+
+    function nrBroadcastState() {
+      if (!game || !noRepeatsNetwork || noRepeatsNetwork.role !== 'host') return;
+      nrBroadcast({ type: 'nr-state', state: nrPublicState() });
+    }
+
+    function nrRoster() {
+      if (!noRepeatsNetwork) return [];
+      const roster = noRepeatsNetwork.roster || [];
+      if (noRepeatsNetwork.role !== 'host') return roster;
+      return roster.filter(player => player.id === 'p0' ||
+        (noRepeatsNetwork.connections.get(player.id) && noRepeatsNetwork.connections.get(player.id).open));
+    }
+
+    function nrLobbyState(playerId = null, spectator = false) {
+      return {
+        type: 'nr-lobby-state', playerId, spectator,
+        roster: nrRoster().map(player => ({ id: player.id, name: player.name })),
+        started: !!(noRepeatsNetwork && noRepeatsNetwork.started)
+      };
+    }
+
+    function nrBroadcastLobby() {
+      if (!noRepeatsNetwork || noRepeatsNetwork.role !== 'host') return;
+      for (const [playerId, connection] of noRepeatsNetwork.connections) {
+        if (connection && connection.open) connection.send(nrLobbyState(playerId));
+      }
+      for (const connection of noRepeatsNetwork.spectators.values()) {
+        if (connection && connection.open) connection.send(nrLobbyState(null, true));
+      }
+      render(); updateStatus();
+    }
+
+    function nrOfferSpectator(connection) {
+      const network = noRepeatsNetwork;
+      let offerSent = false;
+      const sendOffer = () => {
+        if (offerSent || !connection.open) return;
+        offerSent = true;
+        connection.send(network && network.allowSpectators
+          ? { type: 'nr-spectator-offer' }
+          : { type: 'full' });
+        if (!network || !network.allowSpectators) setTimeout(() => connection.close(), 500);
+      };
+      connection.on('open', sendOffer);
+      if (connection.open) sendOffer();
+      if (!network || !network.allowSpectators) {
+        return;
+      }
+      connection.on('data', message => {
+        if (!noRepeatsNetwork || noRepeatsNetwork !== network || message.type !== 'nr-spectator-accept') return;
+        network.spectators.set(`s${network.spectators.size + 1}`, connection);
+        if (game && network.started) connection.send({ type: 'nr-start', state: nrPublicState(), spectator: true });
+        else connection.send(nrLobbyState(null, true));
+      });
+      connection.on('close', () => {
+        if (noRepeatsNetwork === network) {
+          for (const [id, candidate] of network.spectators) if (candidate === connection) network.spectators.delete(id);
+        }
+      });
+    }
+
+    function nrHandleHostMessage(network, playerId, connection, message) {
+      if (noRepeatsNetwork !== network || network.role !== 'host' || !message) return;
+      if (message.type === 'nr-action' && network.connections.get(playerId) === connection && network.started) {
+        nrApplyAction(playerId, message.action || {});
+        render(); updateStatus(); nrBroadcastState();
+      }
+    }
+
+    function nrWelcomeHostPlayer(network, playerId, connection) {
+      if (noRepeatsNetwork !== network || network.connections.get(playerId) !== connection) return;
+      if (network.started) {
+        if (game && game.players.some(player => player.id === playerId)) {
+          connection.send({ type: 'nr-start', playerId, state: nrPublicState() });
+        } else {
+          network.connections.delete(playerId);
+          network.roster = network.roster.filter(player => player.id !== playerId);
+          nrOfferSpectator(connection);
+        }
+      } else {
+        connection.send(nrLobbyState(playerId));
+        nrBroadcastLobby();
+      }
+    }
+
+    function hostNoRepeatsGame(attempt = 0) {
+      leaveGame();
+      localMode = false;
+      spectatorMode = false;
+      const network = noRepeatsNetwork = {
+        role: 'host', playerId: 'p0', code: randomCode(), allowSpectators: false, started: false,
+        roster: [{ id: 'p0', name: 'Host' }], connections: new Map(), spectators: new Map()
+      };
+      const p = new Peer(PEER_PREFIX + network.code);
+      peer = p;
+      p.on('open', () => {
+        if (noRepeatsNetwork !== network) return;
+        panelEl.hidden = false;
+        render(); updateStatus();
+      });
+      p.on('connection', connection => {
+        if (noRepeatsNetwork !== network) return;
+        if (network.started || network.roster.length >= 8) {
+          nrOfferSpectator(connection);
+          return;
+        }
+        const used = new Set(network.roster.map(player => player.id));
+        for (const playerId of network.connections.keys()) used.add(playerId);
+        let seat = 1;
+        while (used.has(`p${seat}`) && seat < 8) seat++;
+        if (seat >= 8) { nrOfferSpectator(connection); return; }
+        const playerId = `p${seat}`;
+        const player = { id: playerId, name: `Player ${seat + 1}` };
+        network.roster.push(player);
+        network.connections.set(playerId, connection);
+        connection.on('data', message => nrHandleHostMessage(network, playerId, connection, message));
+        let welcomed = false;
+        const welcomePlayer = () => {
+          if (welcomed) return;
+          welcomed = true;
+          nrWelcomeHostPlayer(network, playerId, connection);
+        };
+        connection.on('open', welcomePlayer);
+        if (connection.open) welcomePlayer();
+        connection.on('close', () => {
+          if (noRepeatsNetwork !== network || network.connections.get(playerId) !== connection) return;
+          network.connections.delete(playerId);
+          if (!network.started) {
+            network.roster = network.roster.filter(candidate => candidate.id !== playerId);
+            nrBroadcastLobby();
+          } else if (game && phase !== 'over') {
+            nrApplyAction(playerId, { type: 'resign' });
+            nrBroadcastState();
+          }
+        });
+        render(); updateStatus();
+      });
+      p.on('error', error => {
+        if (noRepeatsNetwork !== network) return;
+        if (error.type === 'unavailable-id' && attempt < 3) hostNoRepeatsGame(attempt + 1);
+        else setStatus('Could Not Create Game - Try Again', true);
+      });
+      panelEl.hidden = false;
+      render(); updateStatus();
+    }
+
+    function joinNoRepeatsGame() {
+      const code = document.getElementById('join-code').value.trim().toUpperCase();
+      if (!code) { setStatus('Enter a Game Code', true); return; }
+      leaveGame();
+      localMode = false;
+      spectatorMode = false;
+      const network = noRepeatsNetwork = { role: 'joining', playerId: null, roster: [], connection: null, awaitingAction: false };
+      setStatus('Joining No Repeats...');
+      const p = new Peer();
+      peer = p;
+      p.on('open', () => {
+        const connection = p.connect(PEER_PREFIX + code, { reliable: true });
+        network.connection = connection;
+        connection.on('data', message => {
+          if (!message) return;
+          if (message.type === 'nr-spectator-offer') {
+            if (confirm('This game is full. Would you like to spectate?')) connection.send({ type: 'nr-spectator-accept' });
+            else { connection.send({ type: 'nr-spectator-decline' }); leaveGame(); setStatus('Game Is Full', true); }
+          } else if (message.type === 'nr-lobby-state' || message.type === 'nr-start' || message.type === 'nr-state') {
+            nrHandleClientMessage(network, connection, message);
+          } else if (message.type === 'full') {
+            leaveGame(); setStatus('That Game Is Already Full', true);
+          }
+        });
+        connection.on('close', () => {
+          if (noRepeatsNetwork !== network) return;
+          if (network.role === 'client' && game && phase !== 'over') {
+            game.result = 'Host Disconnected'; game.nrPhase = 'over'; phase = 'over';
+            game.logLines.push(game.result); render(); updateStatus();
+          } else if (network.role === 'joining') {
+            setStatus('Could Not Connect - Try Again', true);
+          }
+        });
+        let connected = false;
+        const onConnectionOpen = () => {
+          if (connected) return;
+          connected = true;
+          if (noRepeatsNetwork === network) setStatus('Connected; waiting for the host...');
+        };
+        connection.on('open', onConnectionOpen);
+        if (connection.open) onConnectionOpen();
+      });
+      p.on('error', error => {
+        if (noRepeatsNetwork !== network) return;
+        if (error.type === 'peer-unavailable') { leaveGame(); setStatus('No Game Found', true); }
+        else if (!game) { leaveGame(); setStatus('Could Not Connect - Try Again', true); }
+      });
+      setTimeout(() => {
+        if (noRepeatsNetwork === network && network.role === 'joining') {
+          leaveGame();
+          setStatus('Host Did Not Respond - Check the Game Code and Try Again', true);
+        }
+      }, 15000);
+    }
+
+    function nrStartHostedGame() {
+      if (!noRepeatsNetwork || noRepeatsNetwork.role !== 'host' || noRepeatsNetwork.started ||
+        nrRoster().length < 2 || nrRoster().length > 8) return;
+      noRepeatsNetwork.allowSpectators = noRepeatsAllowSpectatorsEl.checked;
+      noRepeatsNetwork.started = true;
+      game = nrNewGame(nrRoster());
+      phase = 'select';
+      nrStartRound();
+      render(); updateStatus();
+      nrBroadcast({ type: 'nr-start', state: nrPublicState() });
+    }
+
+    function nrStartNextRound() {
+      if (!game || game.nrPhase !== 'between' || spectatorMode ||
+        !(localMode || (noRepeatsNetwork && noRepeatsNetwork.role === 'host'))) return;
+      nrStartRound();
+      render(); updateStatus();
+      if (noRepeatsNetwork && noRepeatsNetwork.role === 'host') nrBroadcastState();
+    }
+
+    function nrPlayerCanAct(playerId) {
+      if (!game || !noRepeatsNetwork || spectatorMode || !nrCanControl(playerId)) return false;
+      return (game.nrPhase === 'turn' && game.currentPlayerId === playerId) ||
+        (game.nrPhase === 'choice' && game.pendingChoice && game.pendingChoice.chooserId === playerId);
+    }
+
+    function nrPlayerResign() {
+      const playerId = nrControlPlayerId();
+      if (!game || !nrCanControl(playerId) || !['turn', 'choice'].includes(game.nrPhase)) return;
+      const player = game.players.find(candidate => candidate.id === playerId);
+      if (!player || !confirm(`${player.name} resign?`)) return;
+      nrPerformAction({ type: 'resign' });
+    }
+
+    function nrPlayerLabel(player) {
+      const inPlay = game.nrPhase !== 'between' && game.nrPhase !== 'over';
+      if (player.forfeited) return 'Resigned';
+      if (player.busted) return 'Busted';
+      if (player.stayed) return 'Stayed';
+      if (inPlay) return 'Active';
+      return `Round +${player.roundPoints}`;
+    }
+
+    function renderNoRepeats() {
+      panelEl.classList.add('no-repeats-active');
+      rowCallLayoutEl.classList.remove('active', 'choosing-line');
+      noRepeatsPanelEl.hidden = false;
+      noRepeatsLobbyEl.hidden = !!game;
+      noRepeatsGameEl.hidden = !game;
+      boardEl.hidden = true;
+      logEl.hidden = true;
+      fourPanelEl.hidden = true;
+      extraControlsEl.hidden = true;
+      clockBarEl.hidden = true;
+      capturedEl.w.hidden = true;
+      capturedEl.b.hidden = true;
+      reviewBtnEl.hidden = true;
+      reviewBarEl.hidden = true;
+      rematchBtnEl.hidden = true;
+      noRepeatsLobbyPlayersEl.innerHTML = '';
+      noRepeatsPlayersEl.innerHTML = '';
+      noRepeatsChoiceButtonsEl.innerHTML = '';
+      noRepeatsTurnControlsEl.hidden = true;
+      noRepeatsChoiceButtonsEl.hidden = true;
+      noRepeatsBetweenControlsEl.hidden = true;
+      const isHostLobby = !game && noRepeatsNetwork && noRepeatsNetwork.role === 'host';
+      noRepeatsPlayBtnEl.hidden = !isHostLobby;
+      noRepeatsAllowSpectatorsEl.parentElement.hidden = !isHostLobby;
+      if (!game) {
+        const roster = nrRoster();
+        noRepeatsLobbyCountEl.textContent = `${roster.length} / 8 players joined`;
+        noRepeatsPlayBtnEl.disabled = roster.length < 2 || roster.length > 8;
+        for (const player of roster) {
+          const row = document.createElement('div');
+          row.className = 'nr-player'; row.textContent = player.name;
+          noRepeatsLobbyPlayersEl.appendChild(row);
+        }
+        return;
+      }
+      noRepeatsRoundLabelEl.textContent = `Round ${game.round}`;
+      noRepeatsDeckCountEl.textContent = `Draw pile: ${noRepeatsNetwork && noRepeatsNetwork.role === 'host' || localMode ? game.deck.length : game.deckCount} · Discard: ${game.discard.length}`;
+      for (const player of game.players) {
+        const cardRow = document.createElement('div');
+        cardRow.className = 'nr-player';
+        if (game.currentPlayerId === player.id || (game.pendingChoice && game.pendingChoice.chooserId === player.id)) cardRow.classList.add('current');
+        if (player.busted) cardRow.classList.add('busted');
+        if (player.forfeited) cardRow.classList.add('forfeited');
+        const title = document.createElement('div'); title.className = 'nr-player-title';
+        const score = document.createElement('span'); score.textContent = `${player.name} · ${player.score} points`;
+        const state = document.createElement('span'); state.textContent = nrPlayerLabel(player);
+        title.append(score, state); cardRow.appendChild(title);
+        const cards = document.createElement('div'); cards.className = 'nr-cards';
+        const visibleHand = game.nrPhase === 'between' || game.nrPhase === 'over' ? player.lastHand : player.hand;
+        for (const card of visibleHand || []) {
+          const badge = document.createElement('span');
+          badge.className = 'nr-card' + (card.type === 'bonus' ? ' bonus' : ['freeze','flip3','extraLife','x2'].includes(card.type) ? ' special' : '');
+          badge.textContent = nrCardLabel(card); badge.title = nrCardLabel(card);
+          cards.appendChild(badge);
+        }
+        cardRow.appendChild(cards);
+        if (game.nrPhase === 'between' || game.nrPhase === 'over') {
+          const subtotal = document.createElement('div'); subtotal.className = 'nr-status';
+          const result = game.lastRound.find(item => item.id === player.id);
+          subtotal.textContent = result ? `Round score: +${result.points}${result.seven ? ' (7-card bonus +15)' : ''}` : '';
+          cardRow.appendChild(subtotal);
+        }
+        noRepeatsPlayersEl.appendChild(cardRow);
+      }
+      let statusText = '';
+      if (game.nrPhase === 'turn') {
+        const current = game.players.find(player => player.id === game.currentPlayerId);
+        statusText = current ? `${current.name}: Hit or Stay` : '';
+      } else if (game.nrPhase === 'choice' && game.pendingChoice) {
+        const chooser = game.players.find(player => player.id === game.pendingChoice.chooserId);
+        statusText = chooser ? `${chooser.name}: ${game.pendingChoice.type === 'freeze' ? 'choose an active player to freeze' : game.pendingChoice.type === 'flip3' ? 'choose an active player to Flip 3' : 'choose who gets Extra Life'}` : '';
+      } else if (game.nrPhase === 'between') statusText = 'Round complete. The host can start the next round.';
+      else if (game.nrPhase === 'over') statusText = game.result || '';
+      noRepeatsGameStatusEl.textContent = statusText;
+
+      const playerId = nrControlPlayerId();
+      const canAct = nrCanControl(playerId) && !noRepeatsNetwork.awaitingAction;
+      if (game.nrPhase === 'turn' && game.currentPlayerId === playerId && canAct) noRepeatsTurnControlsEl.hidden = false;
+      if (game.nrPhase === 'choice' && game.pendingChoice && game.pendingChoice.chooserId === playerId && canAct) {
+        noRepeatsChoiceButtonsEl.hidden = false;
+        for (const targetId of game.pendingChoice.options) {
+          const target = game.players.find(player => player.id === targetId);
+          if (!target) continue;
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'btn';
+          button.textContent = target.name;
+          button.addEventListener('click', () => nrPerformAction({ type: 'choose', targetId }));
+          noRepeatsChoiceButtonsEl.appendChild(button);
+        }
+      }
+      if (game.nrPhase === 'between' && !spectatorMode && (localMode || (noRepeatsNetwork && noRepeatsNetwork.role === 'host'))) {
+        noRepeatsBetweenControlsEl.hidden = false;
+      }
+      const canResign = nrCanControl(playerId) && !noRepeatsNetwork.awaitingAction && ['turn', 'choice'].includes(game.nrPhase) &&
+        (!localMode || nrPlayerCanAct(playerId));
+      extraControlsEl.hidden = !canResign;
+      resignBtnEl.hidden = !canResign;
+      claimBtnEl.hidden = true;
+      setLog((game.logLines || []).slice(-18));
+      updateClockDisplay();
+    }
+
+    function updateNoRepeatsStatus() {
+      if (!game) {
+        if (!noRepeatsNetwork) { setStatus('Host or join a game'); return; }
+        if (noRepeatsNetwork.role === 'host') setStatus(`Game Code: ${noRepeatsNetwork.code} · ${noRepeatsNetwork.roster.length} / 8 players`);
+        else if (noRepeatsNetwork.role === 'joining') setStatus('Joining No Repeats...');
+        else setStatus(`Waiting for host · ${noRepeatsNetwork.roster.length} / 8 players`);
+        return;
+      }
+      if (game.nrPhase === 'over') setStatus(game.result || 'Game over');
+      else if (game.nrPhase === 'between') setStatus('Round complete · waiting for the next round');
+      else if (game.nrPhase === 'choice') {
+        const player = game.players.find(candidate => candidate.id === game.pendingChoice.chooserId);
+        setStatus(player && nrCanControl(player.id) ? `Your choice: ${game.pendingChoice.type}` : `${player ? player.name : 'A player'} is choosing ${game.pendingChoice.type}`);
+      } else {
+        const player = game.players.find(candidate => candidate.id === game.currentPlayerId);
+        setStatus(player && nrCanControl(player.id) ? 'Your turn · Hit or Stay' : `${player ? player.name : 'A player'} to Hit or Stay`);
+      }
     }
 
     function renderRowCall() {
@@ -4632,6 +5537,10 @@
 
     function resignCurrentGame() {
       if (!game || phase !== 'select' || spectatorMode) return;
+      if (isNoRepeats()) {
+        nrPlayerResign();
+        return;
+      }
       if (isFour()) {
         const color = game.turn;
         if (fourCanClaim() !== color && !confirm(`${FOUR_SIDE[color]} resign?`)) return;
@@ -4647,6 +5556,10 @@
     }
 
     function updateStatus() {
+      if (isNoRepeats()) {
+        updateNoRepeatsStatus();
+        return;
+      }
       if (!game) return;
       if (isRowCall()) {
         if (phase === 'over') setStatus(game.result);
@@ -5513,6 +6426,14 @@
     }
 
     function render() {
+      if (isNoRepeats()) {
+        renderNoRepeats();
+        return;
+      }
+      panelEl.classList.remove('no-repeats-active');
+      noRepeatsPanelEl.hidden = true;
+      boardEl.hidden = false;
+      logEl.hidden = false;
       if (!game) return;
       if (isRowCall()) {
         renderRowCall();
@@ -5912,6 +6833,8 @@
       lastGuestMoveSeq = 0;
       const oldFourNetwork = fourNetwork;
       fourNetwork = null;
+      const oldNoRepeatsNetwork = noRepeatsNetwork;
+      noRepeatsNetwork = null;
       spectatorMode = false;
       clearTimeout(handoffTimer);
       handoffTimer = null;
@@ -5930,6 +6853,12 @@
       if (oldFourNetwork && oldFourNetwork.spectators) {
         for (const c of oldFourNetwork.spectators) if (c && c.open) c.close();
       }
+      if (oldNoRepeatsNetwork && oldNoRepeatsNetwork.connections) {
+        for (const c of oldNoRepeatsNetwork.connections.values()) if (c && c.open) c.close();
+      }
+      if (oldNoRepeatsNetwork && oldNoRepeatsNetwork.spectators) {
+        for (const c of oldNoRepeatsNetwork.spectators.values()) if (c && c.open) c.close();
+      }
       for (const c of hostedSpectators) if (c && c.open) c.close();
       hostedSpectators = new Set();
       hostAllowsSpectators = false;
@@ -5941,6 +6870,7 @@
       game = null;
       panelEl.hidden = true;
       fourPanelEl.hidden = true;
+      noRepeatsPanelEl.hidden = true;
       extraControlsEl.hidden = true;
       clockBarEl.hidden = true;
       capturedEl.w.hidden = false;
@@ -6122,6 +7052,21 @@
           if (myColor === 'b' || spectatorMode) finishNetworkTimeout(msg.color);
         } else if (msg.type === 'resign' && game && !spectatorMode && msg.color === opponent(myColor)) {
           finishTwoPlayerResignation(msg.color, true);
+        } else if (msg.type === 'nr-spectator-offer') {
+          if (confirm('This game is full. Would you like to spectate?')) {
+            noRepeatsNetwork = { role: 'joining', playerId: null, roster: [], connection: c, awaitingAction: false };
+            setGameKind('norepeats');
+            c.send({ type: 'nr-spectator-accept' });
+          } else {
+            c.send({ type: 'nr-spectator-decline' });
+            leaveGame();
+            setStatus('Game Is Full', true);
+          }
+        } else if (['nr-lobby-state', 'nr-start', 'nr-state'].includes(msg.type)) {
+          if (!noRepeatsNetwork || noRepeatsNetwork.connection !== c) {
+            noRepeatsNetwork = { role: 'joining', playerId: null, roster: [], connection: c, awaitingAction: false };
+          }
+          nrHandleClientMessage(noRepeatsNetwork, c, msg);
         } else if (msg.type === 'start') {
           setGameKind(GAMES.some(g => g.id === msg.kind) ? msg.kind : 'sync');
           simultaneousMode = msg.simultaneous === true || gameKind === 'sync';
@@ -6189,7 +7134,14 @@
           setStatus('That Game Is Already Full', true);
         }
       });
-      c.on('close', () => opponentLeft(c));
+      c.on('close', () => {
+        if (noRepeatsNetwork && noRepeatsNetwork.connection === c &&
+          noRepeatsNetwork.role === 'client' && game && phase !== 'over') {
+          game.result = 'Host Disconnected'; game.nrPhase = 'over'; phase = 'over';
+          game.logLines.push(game.result); render(); updateStatus();
+        }
+        opponentLeft(c);
+      });
     }
 
     setInterval(() => {
@@ -6330,6 +7282,10 @@
     }
 
     function joinGame() {
+      if (isNoRepeats()) {
+        joinNoRepeatsGame();
+        return;
+      }
       const code = document.getElementById('join-code').value.trim().toUpperCase();
       if (!code) {
         setStatus('Enter a Game Code', true);
@@ -6366,6 +7322,21 @@
 
     function openTimeModal(action) {
       pendingAction = action;
+      const noRepeatsLocal = isNoRepeats() && action === 'local';
+      noRepeatsLocalPlayersEl.hidden = !noRepeatsLocal;
+      timePresetsEl.hidden = noRepeatsLocal;
+      timeFieldsEl.hidden = noRepeatsLocal;
+      if (noRepeatsLocal) {
+        timeFieldsEl.innerHTML = '';
+        timeTitleEl.textContent = 'No Repeats';
+        timeHelpEl.textContent = 'Choose 2 to 8 players for a local pass-and-play game.';
+        syncModeOptionEl.hidden = true;
+        memoryModeOptionEl.hidden = true;
+        spectatorsOptionEl.hidden = true;
+        timeModalEl.hidden = false;
+        noRepeatsPlayerCountEl.focus();
+        return;
+      }
       timeFieldsEl.innerHTML = '';
       const colors = isFour() ? FOUR_ORDER : ['w', 'b'];
       const showBots = action === 'local' && gameKind === 'chess';
@@ -6545,6 +7516,8 @@
       reviewBarEl.hidden = true;
       reviewBtnEl.hidden = true;
       fourPanelEl.hidden = true;
+      noRepeatsPanelEl.hidden = true;
+      boardEl.hidden = false;
       extraControlsEl.hidden = true;
       clockBarEl.hidden = true;
       capturedEl.w.hidden = false;
@@ -6628,7 +7601,8 @@
       openTimeModal('local');
     });
     document.getElementById('host-btn').addEventListener('click', () => {
-      openTimeModal('host');
+      if (isNoRepeats()) hostNoRepeatsGame();
+      else openTimeModal('host');
     });
     document.getElementById('join-btn').addEventListener('click', joinGame);
     document.getElementById('join-code').addEventListener('keydown', e => {
@@ -6637,6 +7611,12 @@
     timeCancelEl.addEventListener('click', closeTimeModal);
     timeStartEl.addEventListener('click', () => {
       const action = pendingAction;
+      if (isNoRepeats() && action === 'local') {
+        timeModalEl.hidden = true;
+        pendingAction = null;
+        newNoRepeatsLocalGame(Number(noRepeatsPlayerCountEl.value));
+        return;
+      }
       const controls = collectTimeControls();
       const allowSpectators = allowSpectatorsInputEl.checked;
       const chosenBots = action === 'local' && gameKind === 'chess'
@@ -6647,9 +7627,9 @@
           })
           .map(row => row.dataset.color))
         : new Set();
-      simultaneousMode = gameKind === 'sync' || (!isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && syncModeInputEl.checked);
+      simultaneousMode = gameKind === 'sync' || (!isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && !isNoRepeats() && syncModeInputEl.checked);
       if (chosenBots.size) simultaneousMode = false;
-      memoryMode = gameKind !== 'memory' && !isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && memoryModeInputEl.checked;
+      memoryMode = gameKind !== 'memory' && !isTeeko() && !isAmazons() && !isPferde() && !isCats() && !isRowCall() && !isNoRepeats() && memoryModeInputEl.checked;
       botSeats = chosenBots;
       timeModalEl.hidden = true;
       pendingAction = null;
@@ -6669,6 +7649,15 @@
       applyTimePreset(Number(btn.dataset.minutes), Number(btn.dataset.increment));
     });
     resignBtnEl.addEventListener('click', resignCurrentGame);
+    noRepeatsPlayBtnEl.addEventListener('click', nrStartHostedGame);
+    document.getElementById('nr-hit-btn').addEventListener('click', () => nrPerformAction({ type: 'hit' }));
+    document.getElementById('nr-stay-btn').addEventListener('click', () => nrPerformAction({ type: 'stay' }));
+    document.getElementById('nr-next-round-btn').addEventListener('click', nrStartNextRound);
+    noRepeatsAllowSpectatorsEl.addEventListener('change', () => {
+      if (noRepeatsNetwork && noRepeatsNetwork.role === 'host') {
+        noRepeatsNetwork.allowSpectators = noRepeatsAllowSpectatorsEl.checked;
+      }
+    });
     claimBtnEl.addEventListener('click', () => {
       if (!isFour() || phase !== 'select') return;
       const color = fourCanClaim();
